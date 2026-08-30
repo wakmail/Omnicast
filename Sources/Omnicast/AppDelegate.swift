@@ -112,7 +112,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if settingsStore.settings.dictationEnabled && !dictationPermissions.isGranted {
                 try settingsStore.update { $0.dictationEnabled = false }
             }
-            let hyperKeyManager = HyperKeyManager(settings: settingsStore.settings.hyperKey)
+            let hyperKeyManager = HyperKeyManager(
+                settings: settingsStore.settings.hyperKey,
+                onOpenOmnicast: { [weak self] in self?.toggleLauncher() },
+                onOpenApplication: { bundleIdentifier in
+                    guard let url = NSWorkspace.shared.urlForApplication(
+                        withBundleIdentifier: bundleIdentifier
+                    ) else { return }
+                    NSWorkspace.shared.openApplication(at: url, configuration: .init())
+                }
+            )
             let dictationController = HoldToSpeakController(engine: NativeSpeechEngine())
             let dictationHUDPanelController = DictationHUDPanelController(
                 controller: dictationController

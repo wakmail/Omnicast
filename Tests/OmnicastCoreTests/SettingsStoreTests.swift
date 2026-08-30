@@ -14,7 +14,10 @@ final class SettingsStoreTests: XCTestCase {
             settings.hotkey = .controlSpace
             settings.theme = .dark
             settings.launchAtLogin = true
-            settings.hyperKey = HyperKeySettings(mode: .escape, enabled: true)
+            settings.hyperKey = HyperKeySettings(
+                tapAction: .keyboardShortcut(keyCode: 45, modifiers: 1_310_720),
+                enabled: true
+            )
             settings.snippetsEnabled = true
             settings.dictationEnabled = true
             settings.launcherPosition = LauncherWindowPosition(x: 120, y: 340)

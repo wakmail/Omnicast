@@ -32,10 +32,31 @@ public struct HyperKeySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Picker("Tap action", selection: modeBinding) {
-                Text("Do Nothing").tag(HyperKeyMode.nothing)
-                Text("Escape").tag(HyperKeyMode.escape)
-                Text("Toggle Caps Lock").tag(HyperKeyMode.toggle)
+            Picker("Tap action", selection: actionKindBinding) {
+                ForEach(HyperKeyTapActionKind.allCases) { kind in
+                    Text(kind.displayName).tag(kind)
+                }
+            }
+
+            switch store.settings.hyperKey.tapAction {
+            case .keyboardShortcut(let keyCode, let modifiers):
+                LabeledContent("Shortcut") {
+                    HyperKeyShortcutRecorder(
+                        keyCode: keyCode,
+                        modifiers: modifiers,
+                        onChange: updateShortcut
+                    )
+                    .frame(width: 180)
+                }
+            case .openApplication(let bundleIdentifier):
+                HyperKeyApplicationPicker(
+                    bundleIdentifier: Binding(
+                        get: { bundleIdentifier },
+                        set: updateApplication
+                    )
+                )
+            default:
+                EmptyView()
             }
 
             if let message = errorMessage ?? enableController.errorMessage {
@@ -55,17 +76,74 @@ public struct HyperKeySettingsView: View {
         )
     }
 
-    private var modeBinding: Binding<HyperKeyMode> {
+    private var actionKindBinding: Binding<HyperKeyTapActionKind> {
         Binding(
-            get: { store.settings.hyperKey.mode },
-            set: { mode in
-                do {
-                    try store.update { $0.hyperKey.mode = mode }
-                    errorMessage = nil
-                } catch {
-                    errorMessage = error.localizedDescription
-                }
-            }
+            get: { HyperKeyTapActionKind(store.settings.hyperKey.tapAction) },
+            set: { kind in updateAction(kind.defaultAction) }
         )
+    }
+
+    private func updateShortcut(keyCode: UInt16, modifiers: UInt64) {
+        updateAction(.keyboardShortcut(keyCode: keyCode, modifiers: modifiers))
+    }
+
+    private func updateApplication(_ bundleIdentifier: String) {
+        updateAction(.openApplication(bundleIdentifier: bundleIdentifier))
+    }
+
+    private func updateAction(_ action: HyperKeyTapAction) {
+        do {
+            try store.update { $0.hyperKey.tapAction = action }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum HyperKeyTapActionKind: String, CaseIterable, Identifiable {
+    case none
+    case escape
+    case openOmnicast
+    case keyboardShortcut
+    case openApplication
+    case toggleCapsLock
+
+    init(_ action: HyperKeyTapAction) {
+        switch action {
+        case .none: self = .none
+        case .escape: self = .escape
+        case .openOmnicast: self = .openOmnicast
+        case .keyboardShortcut: self = .keyboardShortcut
+        case .openApplication: self = .openApplication
+        case .toggleCapsLock: self = .toggleCapsLock
+        }
+    }
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: "None"
+        case .escape: "Escape"
+        case .openOmnicast: "Open Omnicast"
+        case .keyboardShortcut: "Keyboard Shortcut"
+        case .openApplication: "Open an App"
+        case .toggleCapsLock: "Natural Caps Lock"
+        }
+    }
+
+    var defaultAction: HyperKeyTapAction {
+        switch self {
+        case .none: .none
+        case .escape: .escape
+        case .openOmnicast: .openOmnicast
+        case .keyboardShortcut:
+            .keyboardShortcut(keyCode: 49, modifiers: 1 << 20)
+        case .openApplication:
+            .openApplication(bundleIdentifier: "")
+        case .toggleCapsLock:
+            .toggleCapsLock
+        }
     }
 }

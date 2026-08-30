@@ -1,18 +1,108 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import CoreGraphics
 import Foundation
 @testable import OmnicastCore
 import XCTest
 
 final class HyperKeyTests: XCTestCase {
     func testSettingsRoundTrip() throws {
-        let settings = HyperKeySettings(mode: .escape, enabled: true)
-        let data = try JSONEncoder().encode(settings)
-        XCTAssertEqual(try JSONDecoder().decode(HyperKeySettings.self, from: data), settings)
+        let actions: [HyperKeyTapAction] = [
+            .none,
+            .escape,
+            .openOmnicast,
+            .keyboardShortcut(keyCode: 11, modifiers: 1_310_720),
+            .openApplication(bundleIdentifier: "com.apple.Safari"),
+            .toggleCapsLock
+        ]
+
+        for action in actions {
+            let settings = HyperKeySettings(tapAction: action, enabled: true)
+            let data = try JSONEncoder().encode(settings)
+            XCTAssertEqual(
+                try JSONDecoder().decode(HyperKeySettings.self, from: data),
+                settings
+            )
+        }
+    }
+
+    func testLegacyModesDecodeAsTapActions() throws {
+        let actionsByMode: [(String, HyperKeyTapAction)] = [
+            ("nothing", .none),
+            ("escape", .escape),
+            ("toggle", .toggleCapsLock)
+        ]
+
+        for (mode, action) in actionsByMode {
+            let data = try XCTUnwrap("{\"mode\":\"\(mode)\",\"enabled\":true}".data(using: .utf8))
+            let settings = try JSONDecoder().decode(HyperKeySettings.self, from: data)
+            XCTAssertEqual(settings, HyperKeySettings(tapAction: action, enabled: true))
+        }
+    }
+
+    func testMissingLegacyModeUsesMigrationDefault() throws {
+        let data = try XCTUnwrap("{\"enabled\":true}".data(using: .utf8))
+        XCTAssertEqual(
+            try JSONDecoder().decode(HyperKeySettings.self, from: data),
+            HyperKeySettings(tapAction: .none, enabled: true)
+        )
     }
 
     func testDefaultSettingsAreDisabledWithNothingMode() {
-        XCTAssertEqual(HyperKeySettings(), HyperKeySettings(mode: .nothing, enabled: false))
+        XCTAssertEqual(HyperKeySettings(), HyperKeySettings(tapAction: .none, enabled: false))
+    }
+
+    func testTapPostsConfiguredShortcutOnRelease() {
+        var postedEvents: [(CGKeyCode, CGEventFlags)] = []
+        let state = HyperKeyTapStateMachine(
+            action: .keyboardShortcut(keyCode: 12, modifiers: CGEventFlags.maskCommand.rawValue),
+            eventPoster: { postedEvents.append(($0, $1)) }
+        )
+
+        state.beginSourcePress()
+        XCTAssertTrue(postedEvents.isEmpty)
+        state.endSourcePress()
+
+        XCTAssertEqual(postedEvents.count, 1)
+        XCTAssertEqual(postedEvents.first?.0, 12)
+        XCTAssertEqual(postedEvents.first?.1, .maskCommand)
+    }
+
+    func testComboSuppressesTapAction() {
+        var postedKeyCodes: [CGKeyCode] = []
+        let state = HyperKeyTapStateMachine(
+            action: .escape,
+            eventPoster: { keyCode, _ in postedKeyCodes.append(keyCode) }
+        )
+
+        state.beginSourcePress()
+        state.markComboFired()
+        state.endSourcePress()
+
+        XCTAssertTrue(postedKeyCodes.isEmpty)
+    }
+
+    func testTapRoutesCallbackActions() {
+        var openedOmnicast = false
+        var launchedBundleIdentifier: String?
+        let omnicastState = HyperKeyTapStateMachine(
+            action: .openOmnicast,
+            eventPoster: { _, _ in },
+            openOmnicast: { openedOmnicast = true }
+        )
+        let applicationState = HyperKeyTapStateMachine(
+            action: .openApplication(bundleIdentifier: "com.apple.TextEdit"),
+            eventPoster: { _, _ in },
+            applicationLauncher: { launchedBundleIdentifier = $0 }
+        )
+
+        omnicastState.beginSourcePress()
+        omnicastState.endSourcePress()
+        applicationState.beginSourcePress()
+        applicationState.endSourcePress()
+
+        XCTAssertTrue(openedOmnicast)
+        XCTAssertEqual(launchedBundleIdentifier, "com.apple.TextEdit")
     }
 
     func testMappingParserPreservesExistingEntries() {
