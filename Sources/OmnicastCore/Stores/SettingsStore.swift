@@ -10,6 +10,20 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case dark = "Dark"
 }
 
+public enum SpeechEngineChoice: String, Codable, CaseIterable, Identifiable, Sendable {
+    case system
+    case elevenLabs
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .system: "System Voice"
+        case .elevenLabs: "ElevenLabs"
+        }
+    }
+}
+
 public struct HotkeySettings: Codable, Equatable, Hashable, Sendable {
     public var keyCode: UInt32
     public var modifiers: UInt32
@@ -48,12 +62,17 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var launchAtLogin: Bool
     public var hyperKey: HyperKeySettings
     public var snippetsEnabled: Bool
+    public var dictationEnabled: Bool
     public var launcherPosition: LauncherWindowPosition?
     public var hasShownOnboarding: Bool
     public var defaultAIProvider: AIProviderIdentifier
     public var defaultAIModel: String
     public var openAICompatibleEnabled: Bool
     public var openAICompatibleBaseURL: String
+    public var speechEngine: SpeechEngineChoice
+    public var systemSpeechVoiceIdentifier: String
+    public var systemSpeechRate: Double
+    public var elevenLabsVoiceIdentifier: String
 
     public init(
         hotkey: HotkeySettings = .optionSpace,
@@ -61,24 +80,34 @@ public struct AppSettings: Codable, Equatable, Sendable {
         launchAtLogin: Bool = false,
         hyperKey: HyperKeySettings = HyperKeySettings(),
         snippetsEnabled: Bool = false,
+        dictationEnabled: Bool = false,
         launcherPosition: LauncherWindowPosition? = nil,
         hasShownOnboarding: Bool = false,
         defaultAIProvider: AIProviderIdentifier = .openAI,
         defaultAIModel: String = "gpt-4o-mini",
         openAICompatibleEnabled: Bool = false,
-        openAICompatibleBaseURL: String = ""
+        openAICompatibleBaseURL: String = "",
+        speechEngine: SpeechEngineChoice = .system,
+        systemSpeechVoiceIdentifier: String = "",
+        systemSpeechRate: Double = 0.5,
+        elevenLabsVoiceIdentifier: String = "21m00Tcm4TlvDq8ikWAM"
     ) {
         self.hotkey = hotkey
         self.theme = theme
         self.launchAtLogin = launchAtLogin
         self.hyperKey = hyperKey
         self.snippetsEnabled = snippetsEnabled
+        self.dictationEnabled = dictationEnabled
         self.launcherPosition = launcherPosition
         self.hasShownOnboarding = hasShownOnboarding
         self.defaultAIProvider = defaultAIProvider
         self.defaultAIModel = defaultAIModel
         self.openAICompatibleEnabled = openAICompatibleEnabled
         self.openAICompatibleBaseURL = openAICompatibleBaseURL
+        self.speechEngine = speechEngine
+        self.systemSpeechVoiceIdentifier = systemSpeechVoiceIdentifier
+        self.systemSpeechRate = systemSpeechRate
+        self.elevenLabsVoiceIdentifier = elevenLabsVoiceIdentifier
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -87,12 +116,17 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case launchAtLogin
         case hyperKey
         case snippetsEnabled
+        case dictationEnabled
         case launcherPosition
         case hasShownOnboarding
         case defaultAIProvider
         case defaultAIModel
         case openAICompatibleEnabled
         case openAICompatibleBaseURL
+        case speechEngine
+        case systemSpeechVoiceIdentifier
+        case systemSpeechRate
+        case elevenLabsVoiceIdentifier
     }
 
     public init(from decoder: any Decoder) throws {
@@ -103,6 +137,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         hyperKey = try values.decodeIfPresent(HyperKeySettings.self, forKey: .hyperKey)
             ?? HyperKeySettings()
         snippetsEnabled = try values.decodeIfPresent(Bool.self, forKey: .snippetsEnabled) ?? false
+        dictationEnabled = try values.decodeIfPresent(Bool.self, forKey: .dictationEnabled) ?? false
         launcherPosition = try values.decodeIfPresent(
             LauncherWindowPosition.self,
             forKey: .launcherPosition
@@ -123,6 +158,22 @@ public struct AppSettings: Codable, Equatable, Sendable {
             String.self,
             forKey: .openAICompatibleBaseURL
         ) ?? ""
+        speechEngine = try values.decodeIfPresent(
+            SpeechEngineChoice.self,
+            forKey: .speechEngine
+        ) ?? .system
+        systemSpeechVoiceIdentifier = try values.decodeIfPresent(
+            String.self,
+            forKey: .systemSpeechVoiceIdentifier
+        ) ?? ""
+        systemSpeechRate = try values.decodeIfPresent(
+            Double.self,
+            forKey: .systemSpeechRate
+        ) ?? 0.5
+        elevenLabsVoiceIdentifier = try values.decodeIfPresent(
+            String.self,
+            forKey: .elevenLabsVoiceIdentifier
+        ) ?? "21m00Tcm4TlvDq8ikWAM"
     }
 }
 

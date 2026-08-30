@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Combine
+import OmnicastCore
 import SwiftUI
 
 @MainActor
@@ -32,7 +33,10 @@ public struct LauncherPresentedView {
     }
 }
 
-public typealias LauncherCommandPresenter = @MainActor (String) -> LauncherPresentedView
+public typealias LauncherCommandPresenter = @MainActor (
+    any ViewPresentingCommand,
+    String
+) -> LauncherPresentedView
 
 @MainActor
 public final class LauncherNavigationCoordinator: ObservableObject {

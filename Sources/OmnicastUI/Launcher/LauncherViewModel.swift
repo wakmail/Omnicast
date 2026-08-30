@@ -23,6 +23,7 @@ final class LauncherViewModel: ObservableObject {
     private let frecencyStore: FrecencyStore
     private let keyEvents: LauncherKeyEvents
     private let webSearchBangs: WebSearchBangs
+    private let calculatorProvider: CalculatorProvider
     private let presentingCommands: [String: LauncherCommandPresenter]
     private let onHide: (Bool) -> Void
     private let onOpenSettings: () -> Void
@@ -41,6 +42,7 @@ final class LauncherViewModel: ObservableObject {
         frecencyStore: FrecencyStore,
         keyEvents: LauncherKeyEvents,
         webSearchBangs: WebSearchBangs,
+        calculatorProvider: CalculatorProvider,
         presentingCommands: [String: LauncherCommandPresenter],
         navigationCoordinator: LauncherNavigationCoordinator,
         onHide: @escaping (Bool) -> Void,
@@ -51,6 +53,7 @@ final class LauncherViewModel: ObservableObject {
         self.frecencyStore = frecencyStore
         self.keyEvents = keyEvents
         self.webSearchBangs = webSearchBangs
+        self.calculatorProvider = calculatorProvider
         self.presentingCommands = presentingCommands
         self.onHide = onHide
         self.onOpenSettings = onOpenSettings
@@ -106,8 +109,9 @@ final class LauncherViewModel: ObservableObject {
         }
 
         guard let command = selectedCommand else { return }
-        if let presenter = presentingCommands[command.id] {
-            push(presenter(query))
+        if let command = command as? any ViewPresentingCommand,
+           let presenter = presentingCommands[command.presentationID] {
+            push(presenter(command, query))
             return
         }
 
@@ -331,12 +335,17 @@ final class LauncherViewModel: ObservableObject {
 
     private func updateResults() {
         guard navigation.isRoot, inputMode == .browsing else { return }
-        results = LauncherSearchResults.resolve(
+        var resolved = LauncherSearchResults.resolve(
             commands: commands,
             query: query,
             frecency: frecencyStore.entries,
             bangs: webSearchBangs
         )
+        if let calculation = calculatorProvider.inlineResult(for: query) {
+            resolved.removeAll { $0.command.id == calculation.id }
+            resolved.insert(RankedCommand(command: calculation, score: .infinity), at: 0)
+        }
+        results = resolved
         selectionCameFromKeyboard = true
         selectedIndex = min(selectedIndex, max(0, results.count - 1))
     }

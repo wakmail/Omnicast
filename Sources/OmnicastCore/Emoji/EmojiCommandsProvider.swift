@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct SearchEmojiCommand: Command {
+public struct SearchEmojiCommand: ViewPresentingCommand {
     public let id = "emoji:search"
     public let title = "Search Emoji"
     public let subtitle = "Find and paste an emoji"

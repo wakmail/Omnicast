@@ -41,6 +41,12 @@ final class PermissionEnableFlowTests: XCTestCase {
         var hyperKey = PermissionEnableFlow(feature: .hyperKey)
         hyperKey.requestEnable(granted: [.inputMonitoring])
         XCTAssertEqual(hyperKey.state, .enabled)
+
+        var dictation = PermissionEnableFlow(feature: .dictation)
+        dictation.requestEnable(granted: [.microphone])
+        XCTAssertEqual(dictation.state, .waiting([.speechRecognition]))
+        dictation.permissionsChanged(granted: [.microphone, .speechRecognition])
+        XCTAssertEqual(dictation.state, .enabled)
     }
 
     func testEnabledFeatureTurnsOffWhenItsGrantIsRemoved() {

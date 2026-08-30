@@ -8,9 +8,11 @@ public struct SettingsTabsView: View {
     private let snippetStore: SnippetStore
     private let quicklinkStore: QuicklinkStore
     private let aiKeyStore: AIKeyStore
+    private let speechKeyStore: SpeechKeyStore
     private let permissions: PermissionsService
     private let snippetEnableController: PermissionFeatureController
     private let hyperKeyEnableController: PermissionFeatureController
+    private let dictationEnableController: PermissionFeatureController
     private let extensionsView: AnyView
 
     @MainActor
@@ -19,18 +21,22 @@ public struct SettingsTabsView: View {
         snippetStore: SnippetStore,
         quicklinkStore: QuicklinkStore,
         aiKeyStore: AIKeyStore,
+        speechKeyStore: SpeechKeyStore,
         permissions: PermissionsService,
         snippetEnableController: PermissionFeatureController,
         hyperKeyEnableController: PermissionFeatureController,
+        dictationEnableController: PermissionFeatureController,
         extensionsView: AnyView
     ) {
         self.store = store
         self.snippetStore = snippetStore
         self.quicklinkStore = quicklinkStore
         self.aiKeyStore = aiKeyStore
+        self.speechKeyStore = speechKeyStore
         self.permissions = permissions
         self.snippetEnableController = snippetEnableController
         self.hyperKeyEnableController = hyperKeyEnableController
+        self.dictationEnableController = dictationEnableController
         self.extensionsView = extensionsView
     }
 
@@ -54,13 +60,20 @@ public struct SettingsTabsView: View {
             )
                 .tabItem { Label("Snippets", systemImage: "text.quote") }
 
-            PermissionsView(permissions: permissions)
+            PermissionsView(
+                permissions: permissions,
+                dictationEnableController: dictationEnableController
+            )
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
 
             QuicklinkManagerView(store: quicklinkStore)
                 .tabItem { Label("Quick Links", systemImage: "link") }
 
-            AISettingsView(store: store, keyStore: aiKeyStore)
+            AISettingsView(
+                store: store,
+                keyStore: aiKeyStore,
+                speechKeyStore: speechKeyStore
+            )
                 .tabItem { Label("AI", systemImage: "sparkles") }
 
             extensionsView

@@ -31,7 +31,7 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Omnicast turns your dictation into text on this Mac when possible.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Omnicast reads your calendars to show your schedule in the launcher.</string>
+	<string>Omnicast uses your calendars to show your schedule.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Omnicast asks other apps to act for system commands you run.</string>
 </dict>

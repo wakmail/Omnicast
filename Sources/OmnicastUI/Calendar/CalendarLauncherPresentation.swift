@@ -7,7 +7,7 @@ public enum CalendarLauncherPresentation {
     @MainActor
     public static func presenters(service: CalendarService) -> [String: LauncherCommandPresenter] {
         [
-            MyScheduleCommand().id: { _ in
+            MyScheduleCommand().id: { _, _ in
                 let model = ScheduleViewModel(service: service)
                 return LauncherPresentedView(
                     title: "My Schedule",

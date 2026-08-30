@@ -6,17 +6,15 @@ import SwiftUI
 public enum NotesLauncherPresentation {
     @MainActor
     public static func presenters(store: NotesStore) -> [String: LauncherCommandPresenter] {
-        var result: [String: LauncherCommandPresenter] = [
-            SearchNotesCommand().id: { query in
+        [
+            SearchNotesCommand().id: { _, query in
                 presentedView(store: store, selectedNoteID: nil, initialQuery: query)
+            },
+            "notes.open": { command, _ in
+                let noteID = (command as? OpenNoteCommand)?.note.id
+                return presentedView(store: store, selectedNoteID: noteID)
             }
         ]
-        for note in store.notes {
-            result[OpenNoteCommand.commandID(for: note.id)] = { _ in
-                presentedView(store: store, selectedNoteID: note.id)
-            }
-        }
-        return result
     }
 
     @MainActor

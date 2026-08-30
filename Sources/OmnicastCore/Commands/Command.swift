@@ -35,6 +35,14 @@ public protocol Command: Sendable {
     func execute(context: CommandContext) async throws
 }
 
+public protocol ViewPresentingCommand: Command {
+    var presentationID: String { get }
+}
+
+public extension ViewPresentingCommand {
+    var presentationID: String { id }
+}
+
 public extension Command {
     var resourceURL: URL? { nil }
 }

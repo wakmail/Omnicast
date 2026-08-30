@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct MyScheduleCommand: Command {
+public struct MyScheduleCommand: ViewPresentingCommand {
     public let id = "calendar.schedule"
     public let title = "My Schedule"
     public let subtitle = "View today and the coming week"

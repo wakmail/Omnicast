@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct FileSearchCommand: Command {
+public struct FileSearchCommand: ViewPresentingCommand {
     public let id = "file-search"
     public let title = "Search Files"
     public let subtitle = "Find files and folders"

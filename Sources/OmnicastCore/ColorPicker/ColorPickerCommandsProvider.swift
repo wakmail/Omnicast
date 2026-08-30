@@ -61,7 +61,7 @@ public struct PickColorCommand: Command {
     }
 }
 
-public struct ColorHistoryCommand: Command {
+public struct ColorHistoryCommand: ViewPresentingCommand {
     public let id = "color:history"
     public let title = "Color History"
     public let subtitle = "Copy a recently sampled color"

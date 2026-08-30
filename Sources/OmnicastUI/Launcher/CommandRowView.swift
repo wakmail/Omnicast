@@ -17,27 +17,42 @@ struct CommandRowView: View {
                     height: LauncherTheme.Metrics.rowIconSize
                 )
 
-            HStack(spacing: LauncherTheme.Metrics.rowSubtitleSpacing) {
+            if command is CalculatorResultCommand {
                 Text(command.title)
                     .font(LauncherTheme.Typography.rowTitle)
                     .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
                     .lineLimit(1)
                     .layoutPriority(1)
 
-                if !command.subtitle.isEmpty {
-                    Text(command.subtitle)
-                        .font(LauncherTheme.Typography.rowSubtitle)
-                        .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                Spacer(minLength: LauncherTheme.Metrics.rowTrailingSpacing)
+
+                Text(command.subtitle)
+                    .font(LauncherTheme.Typography.rowTitle)
+                    .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+                    .lineLimit(1)
+            } else {
+                HStack(spacing: LauncherTheme.Metrics.rowSubtitleSpacing) {
+                    Text(command.title)
+                        .font(LauncherTheme.Typography.rowTitle)
+                        .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
                         .lineLimit(1)
+                        .layoutPriority(1)
+
+                    if !command.subtitle.isEmpty {
+                        Text(command.subtitle)
+                            .font(LauncherTheme.Typography.rowSubtitle)
+                            .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                            .lineLimit(1)
+                    }
                 }
+
+                Spacer(minLength: LauncherTheme.Metrics.rowTrailingSpacing)
+
+                Text(command.kind.rawValue)
+                    .font(LauncherTheme.Typography.rowKind)
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                    .lineLimit(1)
             }
-
-            Spacer(minLength: LauncherTheme.Metrics.rowTrailingSpacing)
-
-            Text(command.kind.rawValue)
-                .font(LauncherTheme.Typography.rowKind)
-                .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
-                .lineLimit(1)
         }
         .padding(.horizontal, LauncherTheme.Metrics.rowContentPadding)
         .frame(maxWidth: .infinity, minHeight: LauncherTheme.Metrics.rowHeight, maxHeight: LauncherTheme.Metrics.rowHeight)

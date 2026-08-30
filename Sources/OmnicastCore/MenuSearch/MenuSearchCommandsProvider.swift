@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct SearchMenuItemsCommand: Command {
+public struct SearchMenuItemsCommand: ViewPresentingCommand {
     public let id = "menu:search"
     public let title = "Search Menu Items"
     public let subtitle = "Run a command from the current application menu"

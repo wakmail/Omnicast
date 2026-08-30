@@ -73,9 +73,17 @@ final class PermissionGuideOverlay {
         panel.orderFrontRegardless()
         self.panel = panel
 
-        let publisher = kind == .accessibility
-            ? permissions.$accessibility
-            : permissions.$inputMonitoring
+        let publisher: AnyPublisher<Bool, Never>
+        switch kind {
+        case .accessibility:
+            publisher = permissions.$accessibility.eraseToAnyPublisher()
+        case .inputMonitoring:
+            publisher = permissions.$inputMonitoring.eraseToAnyPublisher()
+        case .microphone:
+            publisher = permissions.$microphone.eraseToAnyPublisher()
+        case .speechRecognition:
+            publisher = permissions.$speechRecognition.eraseToAnyPublisher()
+        }
         grantWatcher = publisher
             .removeDuplicates()
             .filter { $0 }

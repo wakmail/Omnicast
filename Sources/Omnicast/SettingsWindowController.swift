@@ -16,6 +16,8 @@ final class SettingsWindowController: NSWindowController {
         permissions: PermissionsService,
         snippetEnableController: PermissionFeatureController,
         hyperKeyEnableController: PermissionFeatureController,
+        dictationEnableController: PermissionFeatureController,
+        speechKeyStore: SpeechKeyStore,
         extensionRegistry: ExtensionRegistry,
         extensionStoreClient: RaycastStoreClient,
         onRegistryChanged: @escaping () -> Void
@@ -30,9 +32,11 @@ final class SettingsWindowController: NSWindowController {
             snippetStore: snippetStore,
             quicklinkStore: quicklinkStore,
             aiKeyStore: aiKeyStore,
+            speechKeyStore: speechKeyStore,
             permissions: permissions,
             snippetEnableController: snippetEnableController,
             hyperKeyEnableController: hyperKeyEnableController,
+            dictationEnableController: dictationEnableController,
             extensionsView: AnyView(extensions)
         )
         let window = NSWindow(

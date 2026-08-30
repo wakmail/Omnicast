@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct ClipboardHistoryCommand: Command {
+public struct ClipboardHistoryCommand: ViewPresentingCommand {
     public let id = "clipboard:history"
     public let title = "Clipboard History"
     public let subtitle = "Search and paste recent clipboard items"

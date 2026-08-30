@@ -5,10 +5,15 @@ import SwiftUI
 
 public struct PermissionsView: View {
     @ObservedObject private var permissions: PermissionsService
+    @ObservedObject private var dictationEnableController: PermissionFeatureController
 
     @MainActor
-    public init(permissions: PermissionsService) {
+    public init(
+        permissions: PermissionsService,
+        dictationEnableController: PermissionFeatureController
+    ) {
         self.permissions = permissions
+        self.dictationEnableController = dictationEnableController
     }
 
     public var body: some View {
@@ -31,6 +36,35 @@ public struct PermissionsView: View {
                     granted: permissions.inputMonitoring,
                     request: permissions.requestInputMonitoring
                 )
+                permissionRow(
+                    title: "Microphone",
+                    detail: "Used only while you hold the dictation key.",
+                    granted: permissions.microphone,
+                    request: permissions.requestMicrophone
+                )
+                permissionRow(
+                    title: "Speech Recognition",
+                    detail: "Turns your spoken words into text for dictation.",
+                    granted: permissions.speechRecognition,
+                    request: permissions.requestSpeechRecognition
+                )
+            }
+
+            Section("Dictation") {
+                Toggle("Hold Function for Dictation", isOn: Binding(
+                    get: { dictationEnableController.isEnabled },
+                    set: { dictationEnableController.setEnabled($0) }
+                ))
+                if dictationEnableController.isWaiting {
+                    Text(dictationEnableController.feature.waitingMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let error = dictationEnableController.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
 
             Section {
@@ -77,9 +111,14 @@ public struct PermissionsView: View {
 }
 
 public struct OnboardingPermissionsView: View {
+    @ObservedObject private var permissions: PermissionsService
     private let onContinue: () -> Void
 
-    public init(onContinue: @escaping () -> Void) {
+    public init(
+        permissions: PermissionsService,
+        onContinue: @escaping () -> Void
+    ) {
+        self.permissions = permissions
         self.onContinue = onContinue
     }
 
@@ -100,8 +139,21 @@ public struct OnboardingPermissionsView: View {
                 )
                 featureLine(icon: "capslock", text: "The Hyper key uses Input Monitoring.")
                 featureLine(
-                    icon: "checkmark.circle",
-                    text: "Everything else works without these permissions."
+                    icon: "mic",
+                    text: "Dictation uses the microphone and speech recognition only while you hold Function."
+                )
+            }
+
+            HStack {
+                permissionButton(
+                    title: "Allow Microphone",
+                    granted: permissions.microphone,
+                    action: permissions.requestMicrophone
+                )
+                permissionButton(
+                    title: "Allow Speech Recognition",
+                    granted: permissions.speechRecognition,
+                    action: permissions.requestSpeechRecognition
                 )
             }
 
@@ -119,6 +171,7 @@ public struct OnboardingPermissionsView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { permissions.refresh() }
     }
 
     private func featureLine(icon: String, text: String) -> some View {
@@ -129,5 +182,15 @@ public struct OnboardingPermissionsView: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 20)
         }
+    }
+
+    private func permissionButton(
+        title: String,
+        granted: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(granted ? "Granted" : title, action: action)
+            .buttonStyle(.bordered)
+            .disabled(granted)
     }
 }

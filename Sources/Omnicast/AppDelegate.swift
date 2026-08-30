@@ -15,11 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var settingsWindowController: SettingsWindowController?
     private var snippetWindow: NSWindow?
-    private var aiWindow: NSWindow?
     private var settingsStore: SettingsStore?
     private var permissions: PermissionsService?
     private var snippetEnableController: PermissionFeatureController?
     private var hyperKeyEnableController: PermissionFeatureController?
+    private var dictationEnableController: PermissionFeatureController?
     private var registry: CommandRegistry?
     private var commandContext: CommandContext?
 
@@ -30,11 +30,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snippetExpander: SnippetExpander?
     private var quicklinkStore: QuicklinkStore?
     private var fileSearchIndex: FileSearchIndex?
+    private var notesStore: NotesStore?
+    private var calendarService: CalendarService?
+    private var emojiStore: EmojiStore?
+    private var emojiPasteService: EmojiPasteService?
+    private var colorHistoryStore: ColorHistoryStore?
+    private var menuItemIndex: MenuItemIndex?
+    private var calculatorProvider: CalculatorProvider?
+
+    private var dictationPermissions: DictationPermissions?
+    private var dictationController: HoldToSpeakController?
+    private var dictationHUDPanelController: DictationHUDPanelController?
+    private var speechKeyStore: SpeechKeyStore?
+    private var speechEngine: SwitchingSpeechEngine?
+    private var speechProvider: SpeechCommandsProvider?
+    private var appliedSpeechConfiguration: AppliedSpeechConfiguration?
 
     private var aiKeyStore: AIKeyStore?
-    private var aiChatStore: AIChatStore?
-    private var aiViewModel: AIChatViewModel?
-    private var aiConfiguration: AIConfiguration?
+    private var aiController: AIWindowController?
     private var appliedHotkeySettings: HotkeySettings?
     private var appliedTheme: AppTheme?
 
@@ -63,11 +76,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let snippetExpander = SnippetExpander(store: snippetStore)
             let quicklinkStore = try QuicklinkStore()
             let fileSearchIndex = FileSearchIndex()
+            let notesStore = try NotesStore(directoryURL: OmnicastDataDirectory.defaultURL)
+            let calendarService = CalendarService()
+            let emojiStore = try EmojiStore()
+            let emojiPasteService = EmojiPasteService()
+            let colorHistoryStore = try ColorHistoryStore()
+            let menuItemIndex = MenuItemIndex()
+            let calculatorProvider = CalculatorProvider()
             let aiKeyStore = AIKeyStore()
             let aiChatStore = try AIChatStore()
+            let aiController = AIWindowController(
+                keyStore: aiKeyStore,
+                chatStore: aiChatStore,
+                settings: settingsStore.settings,
+                onShow: { [weak self] in self?.panel?.hide(returningFocus: false) }
+            )
+            let speechKeyStore = SpeechKeyStore()
+            let initialSpeechEngine = makeSpeechEngine(
+                settings: settingsStore.settings,
+                keyStore: speechKeyStore
+            )
+            let speechEngine = SwitchingSpeechEngine(activeEngine: initialSpeechEngine)
+            let speechProvider = SpeechCommandsProvider(engine: speechEngine)
             let extensionStoreClient = RaycastStoreClient()
             let extensionRegistry = ExtensionRegistry(store: extensionStoreClient)
-            let permissions = PermissionsService()
+            let dictationPermissions = DictationPermissions()
+            let permissions = PermissionsService(dictationPermissions: dictationPermissions)
             if settingsStore.settings.hyperKey.enabled && !permissions.inputMonitoring {
                 try settingsStore.update { $0.hyperKey.enabled = false }
             }
@@ -75,7 +109,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 && !(permissions.accessibility && permissions.inputMonitoring) {
                 try settingsStore.update { $0.snippetsEnabled = false }
             }
+            if settingsStore.settings.dictationEnabled && !dictationPermissions.isGranted {
+                try settingsStore.update { $0.dictationEnabled = false }
+            }
             let hyperKeyManager = HyperKeyManager(settings: settingsStore.settings.hyperKey)
+            let dictationController = HoldToSpeakController(engine: NativeSpeechEngine())
+            let dictationHUDPanelController = DictationHUDPanelController(
+                controller: dictationController
+            )
             let snippetEnableController = PermissionFeatureController(
                 feature: .snippets,
                 enabled: settingsStore.settings.snippetsEnabled,
@@ -90,6 +131,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) { [unowned settingsStore] enabled in
                 try settingsStore.update { $0.hyperKey.enabled = enabled }
             }
+            let dictationEnableController = PermissionFeatureController(
+                feature: .dictation,
+                enabled: settingsStore.settings.dictationEnabled,
+                permissions: permissions
+            ) { [unowned settingsStore] enabled in
+                try settingsStore.update { $0.dictationEnabled = enabled }
+            }
 
             permissions.onRequest = { [weak permissions] kind in
                 guard let permissions else { return }
@@ -100,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.permissions = permissions
             self.snippetEnableController = snippetEnableController
             self.hyperKeyEnableController = hyperKeyEnableController
+            self.dictationEnableController = dictationEnableController
             self.clipboardStore = clipboardStore
             self.clipboardMonitor = clipboardMonitor
             self.pasteService = pasteService
@@ -107,14 +156,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.snippetExpander = snippetExpander
             self.quicklinkStore = quicklinkStore
             self.fileSearchIndex = fileSearchIndex
+            self.notesStore = notesStore
+            self.calendarService = calendarService
+            self.emojiStore = emojiStore
+            self.emojiPasteService = emojiPasteService
+            self.colorHistoryStore = colorHistoryStore
+            self.menuItemIndex = menuItemIndex
+            self.calculatorProvider = calculatorProvider
+            self.dictationPermissions = dictationPermissions
+            self.dictationController = dictationController
+            self.dictationHUDPanelController = dictationHUDPanelController
+            self.speechKeyStore = speechKeyStore
+            self.speechEngine = speechEngine
+            self.speechProvider = speechProvider
+            self.appliedSpeechConfiguration = AppliedSpeechConfiguration(
+                settings: settingsStore.settings
+            )
             self.aiKeyStore = aiKeyStore
-            self.aiChatStore = aiChatStore
+            self.aiController = aiController
             self.extensionStoreClient = extensionStoreClient
             self.extensionRegistry = extensionRegistry
             self.hyperKeyManager = hyperKeyManager
 
             pasteService.didWritePasteboard = { [weak clipboardMonitor] in
                 clipboardMonitor?.ignoreCurrentPasteboardContents()
+            }
+            emojiPasteService.didWritePasteboard = { [weak clipboardMonitor] in
+                clipboardMonitor?.ignoreCurrentPasteboardContents()
+            }
+            dictationController.onError = { [weak self] error in
+                self?.toastCenter.show(error.localizedDescription)
             }
 
             let clipboardService = SystemClipboardService()
@@ -139,12 +210,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SnippetCommandsProvider(store: snippetStore) { [weak self] in
                     self?.showSnippetManager()
                 },
+                NotesCommandsProvider(store: notesStore),
+                CalendarCommandsProvider(),
+                EmojiCommandsProvider(),
+                ColorPickerCommandsProvider(store: colorHistoryStore),
+                MenuSearchCommandsProvider(),
+                speechProvider,
                 WindowCommandsProvider(
                     adjuster: windowAdjuster,
                     requestAccessibility: { permissions.requestAccessibility() }
                 ),
                 AICommandsProvider { [weak self] destination in
-                    self?.showAIChat(destination)
+                    self?.aiController?.show(destination)
                 },
                 ExtensionCommandsProvider(registry: extensionRegistry) { [weak self] installed, command in
                     self?.showExtension(installed: installed, command: command)
@@ -169,7 +246,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEvents: keyEvents,
                 toasts: toastCenter,
                 webSearchBangs: webSearchBangs,
-                presentingCommands: makePresentingCommands(context: context),
+                calculatorProvider: calculatorProvider,
+                presentingCommands: makeLauncherPresentingCommands(
+                    context: context,
+                    clipboardStore: clipboardStore,
+                    pasteService: pasteService,
+                    fileSearchIndex: fileSearchIndex,
+                    notesStore: notesStore,
+                    calendarService: calendarService,
+                    emojiStore: emojiStore,
+                    emojiPasteService: emojiPasteService,
+                    colorHistoryStore: colorHistoryStore,
+                    menuItemIndex: menuItemIndex,
+                    onHide: { [weak panel] returningFocus in
+                        panel?.hide(returningFocus: returningFocus)
+                    }
+                ),
                 navigationCoordinator: navigationCoordinator,
                 onHide: { [weak panel] returnFocus in
                     panel?.hide(returningFocus: returnFocus)
@@ -201,6 +293,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 && permissions.inputMonitoring {
                 _ = snippetExpander.start()
             }
+            if settingsStore.settings.dictationEnabled && dictationPermissions.isGranted {
+                try? dictationController.startMonitoring()
+            }
             clipboardMonitor.start()
 
             statusBarController = StatusBarController(
@@ -208,7 +303,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onSettings: { [weak self] in self?.showSettings() }
             )
 
-            configureAI(settings: settingsStore.settings)
             applyTheme(settingsStore.settings.theme)
             appliedTheme = settingsStore.settings.theme
             observeSettingsAndStores()
@@ -219,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 navigationCoordinator.push(LauncherPresentedView(
                     title: "Welcome to Omnicast",
                     content: AnyView(OnboardingPermissionsView(
+                        permissions: permissions,
                         onContinue: { [weak self] in
                             self?.navigationCoordinator.pop()
                         }
@@ -244,84 +339,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            hyperKeyManager?.isRunning == false {
             try? hyperKeyManager?.enable()
         }
+        if settingsStore?.settings.dictationEnabled == true,
+           dictationPermissions?.isGranted == true {
+            try? dictationController?.startMonitoring()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         clipboardMonitor?.stop()
         snippetExpander?.stop()
         try? hyperKeyManager?.disable()
+        dictationController?.stopMonitoring()
+        speechEngine?.stop()
         extensionHost?.stop()
         if let distributedObserver {
             DistributedNotificationCenter.default().removeObserver(distributedObserver)
         }
     }
 
-    private func makePresentingCommands(
-        context: CommandContext
-    ) -> [String: LauncherCommandPresenter] {
-        [
-            "clipboard:history": { [unowned self] query in
-                guard let store = clipboardStore, let pasteService else {
-                    return LauncherPresentedView(
-                        title: "Clipboard History",
-                        content: AnyView(EmptyView())
-                    )
-                }
-                let model = ClipboardHistoryViewModel(
-                    store: store,
-                    pasteService: pasteService,
-                    onDismiss: { [weak self] in
-                        self?.panel?.hide(returningFocus: false)
-                    }
-                )
-                model.query = query
-                return LauncherPresentedView(
-                    title: "Clipboard History",
-                    content: AnyView(ClipboardHistoryView(
-                        viewModel: model,
-                        showsChrome: false
-                    )),
-                    initialQuery: query,
-                    onQueryChange: { [weak model] in model?.query = $0 },
-                    onKey: { [weak model] key in
-                        guard let model else { return false }
-                        switch key {
-                        case .moveUp: model.handle(.moveSelectionUp)
-                        case .moveDown: model.handle(.moveSelectionDown)
-                        case .enter: model.handle(.pasteSelected)
-                        case .commandEnter: model.handle(.copySelected)
-                        default: return false
-                        }
-                        return true
-                    }
-                )
-            },
-            "file-search": { [unowned self] query in
-                guard let fileSearchIndex else {
-                    return LauncherPresentedView(
-                        title: "File Search",
-                        content: AnyView(EmptyView())
-                    )
-                }
-                let model = FileSearchViewModel(
-                    index: fileSearchIndex,
-                    context: context,
-                    onOpen: { [weak self] in self?.panel?.hide(returningFocus: true) }
-                )
-                model.updateQuery(query)
-                return LauncherPresentedView(
-                    title: "Files",
-                    content: AnyView(FileSearchView(model: model)),
-                    initialQuery: query,
-                    onQueryChange: { [weak model] in model?.updateQuery($0) },
-                    onKey: { [weak model] key in model?.handle(key) ?? false }
-                )
-            }
-        ]
-    }
-
     private func observeSettingsAndStores() {
-        guard let settingsStore, let snippetStore, let quicklinkStore else { return }
+        guard let settingsStore, let snippetStore, let quicklinkStore, let notesStore else { return }
         settingsStore.$settings
             .dropFirst()
             .sink { [weak self] settings in
@@ -341,13 +378,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } catch {
                     self.toastCenter.show(error.localizedDescription)
                 }
-                if self.aiConfiguration != AIConfiguration(settings: settings) {
-                    self.configureAI(settings: settings)
+                self.aiController?.update(settings: settings)
+                let speechConfiguration = AppliedSpeechConfiguration(settings: settings)
+                if self.appliedSpeechConfiguration != speechConfiguration,
+                   let speechKeyStore = self.speechKeyStore {
+                    self.speechEngine?.replace(with: makeSpeechEngine(
+                        settings: settings,
+                        keyStore: speechKeyStore
+                    ))
+                    self.appliedSpeechConfiguration = speechConfiguration
                 }
                 if settings.snippetsEnabled {
                     _ = self.snippetExpander?.start()
                 } else {
                     self.snippetExpander?.stop()
+                }
+                if settings.dictationEnabled,
+                   self.dictationPermissions?.isGranted == true {
+                    do {
+                        try self.dictationController?.startMonitoring()
+                    } catch {
+                        self.toastCenter.show(error.localizedDescription)
+                    }
+                } else {
+                    self.dictationController?.stopMonitoring()
                 }
             }
             .store(in: &subscriptions)
@@ -358,6 +412,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &subscriptions)
 
         quicklinkStore.$quicklinks
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshCommands() }
+            .store(in: &subscriptions)
+
+        notesStore.$notes
             .dropFirst()
             .sink { [weak self] _ in self?.refreshCommands() }
             .store(in: &subscriptions)
@@ -392,6 +451,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showLauncher() {
         settingsWindowController?.close()
         pasteService?.rememberFrontmostApplication()
+        emojiPasteService?.rememberFrontmostApplication()
+        menuItemIndex?.captureTargetApplication()
         panel?.showNearTop(position: settingsStore?.settings.launcherPosition)
     }
 
@@ -415,6 +476,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let permissions,
             let snippetEnableController,
             let hyperKeyEnableController,
+            let dictationEnableController,
+            let speechKeyStore,
             let extensionRegistry,
             let extensionStoreClient
         else { return }
@@ -427,6 +490,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 permissions: permissions,
                 snippetEnableController: snippetEnableController,
                 hyperKeyEnableController: hyperKeyEnableController,
+                dictationEnableController: dictationEnableController,
+                speechKeyStore: speechKeyStore,
                 extensionRegistry: extensionRegistry,
                 extensionStoreClient: extensionStoreClient,
                 onRegistryChanged: { [weak self] in self?.refreshCommands() }
@@ -453,60 +518,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         snippetWindow?.makeKeyAndOrderFront(nil)
-    }
-
-    private func configureAI(settings: AppSettings) {
-        guard let aiKeyStore, let aiChatStore else { return }
-        var providers: [any AIProvider] = [
-            OpenAIProvider(keyStore: aiKeyStore),
-            AnthropicProvider(keyStore: aiKeyStore),
-            GeminiProvider(keyStore: aiKeyStore),
-            OllamaProvider()
-        ]
-        if settings.openAICompatibleEnabled,
-           let url = URL(string: settings.openAICompatibleBaseURL),
-           !settings.openAICompatibleBaseURL.isEmpty {
-            providers.append(OpenAIProvider(
-                keyStore: aiKeyStore,
-                baseURL: url,
-                compatible: true,
-                defaultModel: settings.defaultAIModel
-            ))
-        }
-        let selectedProvider = providers.contains { $0.identifier == settings.defaultAIProvider }
-            ? settings.defaultAIProvider
-            : providers[0].identifier
-        let viewModel = AIChatViewModel(
-            store: aiChatStore,
-            providers: providers,
-            selectedProvider: selectedProvider
-        )
-        if !settings.defaultAIModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            viewModel.selectedModel = settings.defaultAIModel
-        }
-        aiViewModel = viewModel
-        aiConfiguration = AIConfiguration(settings: settings)
-
-        let window = aiWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 580),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "AI Chat"
-        window.contentView = NSHostingView(rootView: AIChatView(viewModel: viewModel))
-        window.isReleasedWhenClosed = false
-        if aiWindow == nil { window.center() }
-        aiWindow = window
-    }
-
-    private func showAIChat(_ destination: AICommandDestination) {
-        panel?.hide(returningFocus: false)
-        if case .ask = destination {
-            aiViewModel?.newChat()
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        aiWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func showExtension(
@@ -573,19 +584,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = error.localizedDescription
         alert.runModal()
         NSApp.terminate(nil)
-    }
-}
-
-private struct AIConfiguration: Equatable {
-    let provider: AIProviderIdentifier
-    let model: String
-    let compatibleEnabled: Bool
-    let compatibleBaseURL: String
-
-    init(settings: AppSettings) {
-        provider = settings.defaultAIProvider
-        model = settings.defaultAIModel
-        compatibleEnabled = settings.openAICompatibleEnabled
-        compatibleBaseURL = settings.openAICompatibleBaseURL
     }
 }

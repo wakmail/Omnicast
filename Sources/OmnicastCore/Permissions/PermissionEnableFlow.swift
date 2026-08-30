@@ -6,11 +6,13 @@ import Foundation
 public enum PermissionFeature: Equatable, Sendable {
     case snippets
     case hyperKey
+    case dictation
 
     public var requiredPermissions: [PermissionKind] {
         switch self {
         case .snippets: [.accessibility, .inputMonitoring]
         case .hyperKey: [.inputMonitoring]
+        case .dictation: [.microphone, .speechRecognition]
         }
     }
 
@@ -20,6 +22,8 @@ public enum PermissionFeature: Equatable, Sendable {
             "Snippet expansion stays off until Accessibility and Input Monitoring are granted."
         case .hyperKey:
             "The Hyper key stays off until Input Monitoring is granted."
+        case .dictation:
+            "Dictation stays off until Microphone and Speech Recognition are granted."
         }
     }
 }
@@ -103,10 +107,14 @@ public final class PermissionFeatureController: ObservableObject {
         self.persistEnabled = persistEnabled
         flow = PermissionEnableFlow(feature: feature, enabled: enabled)
 
-        permissions.$accessibility
-            .combineLatest(permissions.$inputMonitoring)
+        Publishers.CombineLatest4(
+            permissions.$accessibility,
+            permissions.$inputMonitoring,
+            permissions.$microphone,
+            permissions.$speechRecognition
+        )
             .dropFirst()
-            .sink { [weak self] _, _ in self?.permissionsChanged() }
+            .sink { [weak self] _ in self?.permissionsChanged() }
             .store(in: &subscriptions)
     }
 

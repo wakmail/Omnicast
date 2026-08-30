@@ -2,7 +2,7 @@
 
 import Foundation
 
-public struct SearchNotesCommand: Command {
+public struct SearchNotesCommand: ViewPresentingCommand {
     public let id = "notes.search"
     public let title = "Search Notes"
     public let subtitle = "Browse and edit notes"
@@ -16,7 +16,7 @@ public struct SearchNotesCommand: Command {
     public func execute(context: CommandContext) async throws {}
 }
 
-public struct OpenNoteCommand: Command {
+public struct OpenNoteCommand: ViewPresentingCommand {
     public let note: Note
 
     public var id: String { Self.commandID(for: note.id) }
@@ -26,6 +26,7 @@ public struct OpenNoteCommand: Command {
     public var keywords: [String] { ["note", "markdown", note.body] }
     public var kind: CommandKind { .system }
     public var resourceURL: URL? { nil }
+    public var presentationID: String { "notes.open" }
 
     public init(note: Note) {
         self.note = note

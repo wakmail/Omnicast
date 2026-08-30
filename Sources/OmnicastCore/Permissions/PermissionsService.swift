@@ -9,11 +9,15 @@ import IOKit
 public enum PermissionKind: String, CaseIterable, Hashable, Sendable {
     case accessibility
     case inputMonitoring
+    case microphone
+    case speechRecognition
 
     public var displayName: String {
         switch self {
         case .accessibility: "Accessibility"
         case .inputMonitoring: "Input Monitoring"
+        case .microphone: "Microphone"
+        case .speechRecognition: "Speech Recognition"
         }
     }
 }
@@ -45,6 +49,8 @@ public struct SystemPermissionChecker: PermissionChecking {
 public final class PermissionsService: ObservableObject {
     @Published public private(set) var accessibility: Bool
     @Published public private(set) var inputMonitoring: Bool
+    @Published public private(set) var microphone: Bool
+    @Published public private(set) var speechRecognition: Bool
     @Published public private(set) var waitingFor: Set<PermissionKind> = []
 
     /// The app shell uses this to show its floating guide without making the
@@ -55,6 +61,7 @@ public final class PermissionsService: ObservableObject {
     private let accessibilityRequester: @MainActor () -> Void
     private let inputMonitoringRequester: @MainActor () -> Void
     private let settingsOpener: @MainActor (URL) -> Void
+    private let dictationPermissions: DictationPermissions?
     private let pollInterval: TimeInterval
     private var pollTimer: Timer?
 
@@ -67,7 +74,23 @@ public final class PermissionsService: ObservableObject {
             pollInterval: pollInterval,
             accessibilityRequester: Self.promptForAccessibility,
             inputMonitoringRequester: Self.promptForInputMonitoring,
-            settingsOpener: Self.openSettingsURL
+            settingsOpener: Self.openSettingsURL,
+            dictationPermissions: nil
+        )
+    }
+
+    public convenience init(
+        dictationPermissions: DictationPermissions,
+        checker: any PermissionChecking = SystemPermissionChecker(),
+        pollInterval: TimeInterval = 2
+    ) {
+        self.init(
+            checker: checker,
+            pollInterval: pollInterval,
+            accessibilityRequester: Self.promptForAccessibility,
+            inputMonitoringRequester: Self.promptForInputMonitoring,
+            settingsOpener: Self.openSettingsURL,
+            dictationPermissions: dictationPermissions
         )
     }
 
@@ -76,15 +99,19 @@ public final class PermissionsService: ObservableObject {
         pollInterval: TimeInterval = 2,
         accessibilityRequester: @escaping @MainActor () -> Void,
         inputMonitoringRequester: @escaping @MainActor () -> Void,
-        settingsOpener: @escaping @MainActor (URL) -> Void
+        settingsOpener: @escaping @MainActor (URL) -> Void,
+        dictationPermissions: DictationPermissions? = nil
     ) {
         self.checker = checker
         self.pollInterval = pollInterval
         self.accessibilityRequester = accessibilityRequester
         self.inputMonitoringRequester = inputMonitoringRequester
         self.settingsOpener = settingsOpener
+        self.dictationPermissions = dictationPermissions
         accessibility = checker.accessibilityGranted()
         inputMonitoring = checker.inputMonitoringGranted()
+        microphone = dictationPermissions?.microphone == .granted
+        speechRecognition = dictationPermissions?.speechRecognition == .granted
     }
 
     deinit {
@@ -99,20 +126,33 @@ public final class PermissionsService: ObservableObject {
         var result: Set<PermissionKind> = []
         if accessibility { result.insert(.accessibility) }
         if inputMonitoring { result.insert(.inputMonitoring) }
+        if microphone { result.insert(.microphone) }
+        if speechRecognition { result.insert(.speechRecognition) }
         return result
     }
 
     public func refresh() {
         let accessibilityGranted = checker.accessibilityGranted()
         let inputMonitoringGranted = checker.inputMonitoringGranted()
+        dictationPermissions?.refresh()
+        let microphoneGranted = dictationPermissions?.microphone == .granted
+        let speechRecognitionGranted = dictationPermissions?.speechRecognition == .granted
         if accessibility != accessibilityGranted {
             accessibility = accessibilityGranted
         }
         if inputMonitoring != inputMonitoringGranted {
             inputMonitoring = inputMonitoringGranted
         }
+        if microphone != microphoneGranted {
+            microphone = microphoneGranted
+        }
+        if speechRecognition != speechRecognitionGranted {
+            speechRecognition = speechRecognitionGranted
+        }
         if accessibility { waitingFor.remove(.accessibility) }
         if inputMonitoring { waitingFor.remove(.inputMonitoring) }
+        if microphone { waitingFor.remove(.microphone) }
+        if speechRecognition { waitingFor.remove(.speechRecognition) }
         updatePolling()
     }
 
@@ -120,6 +160,8 @@ public final class PermissionsService: ObservableObject {
         switch kind {
         case .accessibility: requestAccessibility()
         case .inputMonitoring: requestInputMonitoring()
+        case .microphone: requestMicrophone()
+        case .speechRecognition: requestSpeechRecognition()
         }
     }
 
@@ -145,6 +187,32 @@ public final class PermissionsService: ObservableObject {
         inputMonitoringRequester()
         settingsOpener(Self.inputMonitoringSettingsURL)
         onRequest?(.inputMonitoring)
+    }
+
+    public func requestMicrophone() {
+        refresh()
+        guard !microphone, let dictationPermissions else { return }
+        waitingFor.insert(.microphone)
+        Task { [weak self] in
+            let state = await dictationPermissions.requestMicrophone()
+            guard let self else { return }
+            microphone = state == .granted
+            waitingFor.remove(.microphone)
+            updatePolling()
+        }
+    }
+
+    public func requestSpeechRecognition() {
+        refresh()
+        guard !speechRecognition, let dictationPermissions else { return }
+        waitingFor.insert(.speechRecognition)
+        Task { [weak self] in
+            let state = await dictationPermissions.requestSpeechRecognition()
+            guard let self else { return }
+            speechRecognition = state == .granted
+            waitingFor.remove(.speechRecognition)
+            updatePolling()
+        }
     }
 
     /// Opens the privacy area from Settings and watches any missing grants so
