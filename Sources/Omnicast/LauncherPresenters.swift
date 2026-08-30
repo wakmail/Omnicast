@@ -16,7 +16,8 @@ func makeLauncherPresentingCommands(
     emojiPasteService: EmojiPasteService,
     colorHistoryStore: ColorHistoryStore,
     menuItemIndex: MenuItemIndex,
-    onHide: @escaping (Bool) -> Void
+    onHide: @escaping (Bool) -> Void,
+    raycastImporter: RaycastImporter
 ) -> [String: LauncherCommandPresenter] {
     var presenters: [String: LauncherCommandPresenter] = [
         "clipboard:history": { _, query in
@@ -112,5 +113,6 @@ func makeLauncherPresentingCommands(
     presenters.merge(CalendarLauncherPresentation.presenters(service: calendarService)) {
         _, feature in feature
     }
+    presenters.merge(RaycastImportPresentation.presenters(importer: raycastImporter)) { _, feature in feature }
     return presenters
 }
