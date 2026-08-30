@@ -14,20 +14,20 @@ Swift port of SuperCmd 1.0.26. Upstream reference: ~/Developer/supercmd-upstream
 - File search (indexed, protected roots)
 - Menu bar item, launch at login, onboarding permissions flow (Accessibility, Input Monitoring)
 
-## Phase 2: Raycast extension host (in progress: WKWebView host renders the kill-process fixture; store install works through the SuperCmd backend)
+## Phase 2: Raycast extension host (done, first slice: WKWebView host runs real store extensions installed through the SuperCmd backend; native SwiftUI rendering per component remains)
 - JavaScriptCore runtime with Node compat layer (fetch, Buffer, process, fs, path, timers, child_process)
 - WKWebView bridge running upstream's web based @raycast/api shim (src/renderer/src/raycast-api)
 - API bridges to Swift: Clipboard, LocalStorage, preferences, toast, HUD, open, selected text, OAuth, AI
 - Extension registry: install from Raycast store, update, uninstall, preferences UI
 - Later: native SwiftUI rendering per component (List, Detail, Form, Grid, ActionPanel, MenuBarExtra), retiring the web bridge
 
-## Phase 3: AI and voice (AI providers, key store, and chat done; native dictation and read aloud in progress)
+## Phase 3: AI and voice (done, first slice: AI chat, native dictation, system and ElevenLabs read aloud; Whisper and Parakeet local models remain)
 - AI providers: OpenAI, Anthropic, Ollama, Gemini, OpenAI compatible; streaming
 - AI chat view, cursor prompt, Supermemory
 - Dictation: native SFSpeechRecognizer, Whisper, Parakeet (lift upstream helpers)
 - Read aloud: Edge TTS, ElevenLabs
 
-## Phase 4: the rest (notes and calendar in progress)
+## Phase 4: the rest (notes, calendar, emoji, calculator, color picker, menu search, and Raycast .rayconfig import done; Sparkle updater, localization, and theming remain)
 - Notes, Canvas, Calendar (EventKit), color picker, emoji picker, calculator
 - Raycast .rayconfig import
 - Sparkle updater, localization (9 languages), theming and glass effects
