@@ -6,6 +6,7 @@ import SwiftUI
 public struct LauncherView: View {
     @StateObject private var model: LauncherViewModel
     @ObservedObject private var toasts: ToastCenter
+    @Environment(\.colorScheme) private var colorScheme
 
     @MainActor
     public init(
@@ -30,18 +31,19 @@ public struct LauncherView: View {
 
     public var body: some View {
         ZStack {
-            VisualEffectBackground(material: .hudWindow)
+            VisualEffectBackground(material: .underWindowBackground)
+            LauncherTheme.Palette.surface(for: colorScheme)
 
             VStack(spacing: 0) {
                 LauncherSearchField(text: $model.query)
-                    .frame(height: 52)
-                    .padding(.horizontal, 16)
+                    .frame(height: LauncherTheme.Metrics.searchHeight)
+                    .padding(.horizontal, LauncherTheme.Metrics.searchHorizontalPadding)
 
-                Divider().opacity(0.45)
+                divider
 
                 resultList
 
-                Divider().opacity(0.45)
+                divider
 
                 footer
             }
@@ -50,44 +52,59 @@ public struct LauncherView: View {
                 VStack {
                     Spacer()
                     Text(message)
-                        .font(.system(size: 12, weight: .medium))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.ultraThickMaterial, in: Capsule())
-                        .padding(.bottom, 48)
+                        .font(LauncherTheme.Typography.toast)
+                        .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+                        .padding(.horizontal, LauncherTheme.Metrics.toastHorizontalPadding)
+                        .padding(.vertical, LauncherTheme.Metrics.toastVerticalPadding)
+                        .background(LauncherTheme.Palette.toastSurface(for: colorScheme), in: Capsule())
+                        .padding(.bottom, LauncherTheme.Metrics.toastBottomPadding)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .animation(.easeOut(duration: 0.18), value: message)
+                .animation(
+                    .easeOut(duration: LauncherTheme.Metrics.toastAnimationDuration),
+                    value: message
+                )
             }
         }
-        .frame(width: 750, height: 480)
-        .preferredColorScheme(colorScheme)
+        .frame(
+            width: LauncherTheme.Metrics.panelWidth,
+            height: LauncherTheme.Metrics.panelHeight
+        )
+        .clipShape(panelShape)
+        .overlay {
+            panelShape.strokeBorder(
+                LauncherTheme.Palette.borderPrimary(for: colorScheme),
+                lineWidth: LauncherTheme.Metrics.borderWidth
+            )
+        }
     }
 
     private var resultList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    Text("Results")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .padding(.bottom, 2)
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    Text("RESULTS")
+                        .font(LauncherTheme.Typography.section)
+                        .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                        .padding(.leading, LauncherTheme.Metrics.sectionLeadingPadding)
+                        .padding(.top, LauncherTheme.Metrics.sectionTopPadding)
+                        .padding(.bottom, LauncherTheme.Metrics.sectionBottomPadding)
 
                     if model.isLoading {
                         ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: 260)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if model.results.isEmpty {
                         Text("No matching commands")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, minHeight: 260)
+                            .font(LauncherTheme.Typography.emptyState)
+                            .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ForEach(Array(model.results.enumerated()), id: \.element.command.id) { index, result in
                             CommandRowView(
                                 command: result.command,
                                 isSelected: index == model.selectedIndex
                             )
+                            .padding(.horizontal, LauncherTheme.Metrics.rowOuterInset)
                             .id(result.command.id)
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -100,8 +117,8 @@ public struct LauncherView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 8)
             }
+            .scrollIndicators(.hidden)
             .onChange(of: model.selectedIndex) {
                 if let command = model.selectedCommand {
                     proxy.scrollTo(command.id, anchor: .center)
@@ -111,32 +128,59 @@ public struct LauncherView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
-            Text(model.selectedCommand?.title ?? "No selection")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        HStack(spacing: LauncherTheme.Metrics.footerIconTitleSpacing) {
+            if let command = model.selectedCommand {
+                CommandIconView(icon: command.icon)
+                    .frame(
+                        width: LauncherTheme.Metrics.footerIconSize,
+                        height: LauncherTheme.Metrics.footerIconSize
+                    )
+
+                Text(command.title)
+                    .font(LauncherTheme.Typography.footerTitle)
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                    .lineLimit(1)
+            } else {
+                Text("No selection")
+                    .font(LauncherTheme.Typography.footerTitle)
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+            }
 
             Spacer()
 
-            Button("Actions  ⌘K") {
-                model.actionPanelVisible.toggle()
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $model.actionPanelVisible, arrowEdge: .bottom) {
-                actionPanel
-            }
+            HStack(spacing: LauncherTheme.Metrics.footerGroupSpacing) {
+                HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
+                    Text("Open")
+                        .font(LauncherTheme.Typography.footerAction)
+                        .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+                    KeyCap("Enter")
+                }
 
-            Text("Open  ↩")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+                Button {
+                    model.actionPanelVisible.toggle()
+                } label: {
+                    HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
+                        Text("Actions")
+                            .font(LauncherTheme.Typography.footerTitle)
+                            .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                        HStack(spacing: LauncherTheme.Metrics.keyCapSpacing) {
+                            KeyCap("⌘")
+                            KeyCap("K")
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $model.actionPanelVisible, arrowEdge: .bottom) {
+                    actionPanel
+                }
+            }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 40)
+        .padding(.horizontal, LauncherTheme.Metrics.footerHorizontalPadding)
+        .frame(height: LauncherTheme.Metrics.footerHeight)
     }
 
     private var actionPanel: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: LauncherTheme.Metrics.actionPanelSpacing) {
             Button("Open") { model.executeSelected() }
                 .keyboardShortcut(.return, modifiers: [])
 
@@ -146,11 +190,47 @@ public struct LauncherView: View {
             }
         }
         .buttonStyle(.plain)
-        .padding(12)
-        .frame(width: 210, alignment: .leading)
+        .padding(LauncherTheme.Metrics.actionPanelPadding)
+        .frame(width: LauncherTheme.Metrics.actionPanelWidth, alignment: .leading)
     }
 
-    private var colorScheme: ColorScheme? {
-        nil
+    private var divider: some View {
+        LauncherTheme.Palette.borderPrimary(for: colorScheme)
+            .frame(height: LauncherTheme.Metrics.dividerHeight)
+    }
+
+    private var panelShape: RoundedRectangle {
+        RoundedRectangle(
+            cornerRadius: LauncherTheme.Metrics.panelCornerRadius,
+            style: .continuous
+        )
+    }
+}
+
+private struct KeyCap: View {
+    let label: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    init(_ label: String) {
+        self.label = label
+    }
+
+    var body: some View {
+        Text(label)
+            .font(LauncherTheme.Typography.keyCap)
+            .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+            .padding(.horizontal, LauncherTheme.Metrics.keyCapHorizontalPadding)
+            .frame(
+                minWidth: LauncherTheme.Metrics.keyCapMinimumWidth,
+                minHeight: LauncherTheme.Metrics.keyCapHeight,
+                maxHeight: LauncherTheme.Metrics.keyCapHeight
+            )
+            .background(
+                LauncherTheme.Palette.keyCap(for: colorScheme),
+                in: RoundedRectangle(
+                    cornerRadius: LauncherTheme.Metrics.keyCapCornerRadius,
+                    style: .continuous
+                )
+            )
     }
 }

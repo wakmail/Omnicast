@@ -12,6 +12,14 @@ public enum CommandIcon: Equatable, Sendable {
 public enum CommandKind: String, Codable, Sendable {
     case application = "Application"
     case system = "System"
+    case clipboard = "Clipboard"
+    case snippet = "Snippet"
+    case quicklink = "Quick Link"
+    case script = "Script"
+    case file = "File"
+    case window = "Window"
+    case ai = "AI"
+    case extensionCommand = "Extension"
 }
 
 public protocol Command: Sendable {

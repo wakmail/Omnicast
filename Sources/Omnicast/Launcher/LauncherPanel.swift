@@ -11,7 +11,12 @@ final class LauncherPanel: NSPanel {
     init(keyEvents: LauncherKeyEvents) {
         self.keyEvents = keyEvents
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 750, height: 480),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: LauncherTheme.Metrics.panelWidth,
+                height: LauncherTheme.Metrics.panelHeight
+            ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

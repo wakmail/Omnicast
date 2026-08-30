@@ -6,7 +6,7 @@ import SwiftUI
 public struct VisualEffectBackground: NSViewRepresentable {
     public var material: NSVisualEffectView.Material
 
-    public init(material: NSVisualEffectView.Material = .hudWindow) {
+    public init(material: NSVisualEffectView.Material = .underWindowBackground) {
         self.material = material
     }
 

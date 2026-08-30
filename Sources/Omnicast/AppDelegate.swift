@@ -51,7 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let hostingView = NSHostingView(rootView: launcherView)
             hostingView.wantsLayer = true
-            hostingView.layer?.cornerRadius = 16
+            hostingView.layer?.cornerRadius = LauncherTheme.Metrics.panelCornerRadius
+            hostingView.layer?.cornerCurve = .continuous
             hostingView.layer?.masksToBounds = true
             panel.contentView = hostingView
             self.panel = panel
