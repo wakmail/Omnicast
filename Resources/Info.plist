@@ -26,5 +26,13 @@
     <string>Omnicast uses system automation when you run a system command.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Omnicast listens while you hold the dictation key so your speech becomes text.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Omnicast turns your dictation into text on this Mac when possible.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Omnicast reads your calendars to show your schedule in the launcher.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Omnicast asks other apps to act for system commands you run.</string>
 </dict>
 </plist>
