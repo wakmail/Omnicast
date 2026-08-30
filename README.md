@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-GPLv3-green?style=flat-square)](LICENSE)
 
 > [!NOTE]
-> Omnicast is a Swift port of [SuperCmd](https://github.com/SuperCmdLabs/SuperCmd) by Shobhit Bhosure, an Electron launcher with Raycast extension support. SuperCmd 1.x is MIT licensed and is the basis for everything here. SuperCmd 2 moved to a closed, paid model. Omnicast exists so the open version keeps going, and keeps going native.
+> Omnicast is a Swift port of [SuperCmd](https://github.com/SuperCmdLabs/SuperCmd) by Shobhit Bhosure, an Electron launcher that runs Raycast extensions. SuperCmd 1.x is MIT licensed and its full history is preserved in this repo. SuperCmd 2 went closed source and paid. Omnicast picks up where the open version stopped and rebuilds it as a native Mac app.
 
 ## The idea
 
