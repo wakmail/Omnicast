@@ -8,6 +8,7 @@ import zlib
 public enum RayconfigReaderError: Error, Equatable, LocalizedError, Sendable {
     case passwordRequired
     case wrongPassword
+    case unsupportedVersion
     case corruptFile(String)
 
     public var errorDescription: String? {
@@ -16,9 +17,44 @@ public enum RayconfigReaderError: Error, Equatable, LocalizedError, Sendable {
             return "A password is required for this Raycast backup."
         case .wrongPassword:
             return "The password is not valid for this Raycast backup."
+        case .unsupportedVersion:
+            return "This Raycast backup version is not supported."
         case .corruptFile(let reason):
             return "The Raycast backup is corrupt. \(reason)"
         }
+    }
+}
+
+enum RayconfigContainerVersion: Equatable, Sendable {
+    case classic
+}
+
+struct RayconfigContainer: Equatable, Sendable {
+    static let initializationVectorRange = 0..<kCCBlockSizeAES128
+    static let ciphertextOffset = kCCBlockSizeAES128
+    static let saltRange: Range<Int>? = nil
+    static let hmacLength = 0
+
+    let version: RayconfigContainerVersion
+    let initializationVector: Data
+    let ciphertext: Data
+
+    static func parse(_ data: Data) throws -> RayconfigContainer {
+        let minimumSize = kCCBlockSizeAES128 * 2
+        guard data.count >= minimumSize else {
+            throw RayconfigReaderError.corruptFile("The encrypted data is too short.")
+        }
+        guard data.count.isMultiple(of: kCCBlockSizeAES128) else {
+            throw RayconfigReaderError.corruptFile("The encrypted data has an invalid length.")
+        }
+
+        // Raycast exports from 2025 and 2026 have no inline version marker.
+        // Their first block is the random IV and every remaining block is ciphertext.
+        return RayconfigContainer(
+            version: .classic,
+            initializationVector: data.subdata(in: initializationVectorRange),
+            ciphertext: data.subdata(in: ciphertextOffset..<data.count)
+        )
     }
 }
 
@@ -49,24 +85,30 @@ public struct RayconfigReader: Sendable {
         guard let password, !password.isEmpty else {
             throw RayconfigReaderError.passwordRequired
         }
-        guard data.count.isMultiple(of: kCCBlockSizeAES128) else {
-            throw RayconfigReaderError.corruptFile("The encrypted data has an invalid length.")
-        }
+        let container = try RayconfigContainer.parse(data)
+        let decrypted = try decrypt(container, password: password)
+        return try decodeDecryptedPayload(decrypted)
+    }
 
-        let decrypted = try decrypt(data, password: password)
-        guard let gzipStart = gzipOffset(in: decrypted) else {
-            throw RayconfigReaderError.wrongPassword
+    private func decodeDecryptedPayload(_ data: Data) throws -> RaycastBackup {
+        if hasGzipMagic(data) {
+            let jsonData: Data
+            do {
+                jsonData = try gunzip(data)
+            } catch let error as RayconfigReaderError {
+                throw error
+            } catch {
+                throw RayconfigReaderError.corruptFile("The compressed payload could not be unpacked.")
+            }
+            return try decodeBackup(jsonData)
         }
-        let compressed = decrypted[gzipStart...]
-        let jsonData: Data
-        do {
-            jsonData = try gunzip(Data(compressed))
-        } catch let error as RayconfigReaderError {
-            throw error
-        } catch {
-            throw RayconfigReaderError.corruptFile("The compressed payload could not be unpacked.")
+        if firstNonWhitespaceByte(in: data) == Character("{").asciiValue {
+            return try decodeBackup(data)
         }
-        return try decodeBackup(jsonData)
+        if data.starts(with: [0x50, 0x4B]) {
+            throw RayconfigReaderError.unsupportedVersion
+        }
+        throw RayconfigReaderError.wrongPassword
     }
 
     private func decodeBackup(_ data: Data) throws -> RaycastBackup {
@@ -83,38 +125,31 @@ public struct RayconfigReader: Sendable {
         }
     }
 
-    private func gzipOffset(in data: Data) -> Data.Index? {
-        guard data.count >= 3 else { return nil }
-        let limit = min(data.count - 2, 64)
-        for offset in 0..<limit {
-            let index = data.index(data.startIndex, offsetBy: offset)
-            if data[index] == 0x1F,
-               data[data.index(after: index)] == 0x8B,
-               data[data.index(index, offsetBy: 2)] == 0x08 {
-                return index
-            }
-        }
-        return nil
+    private func hasGzipMagic(_ data: Data) -> Bool {
+        data.starts(with: [0x1F, 0x8B, 0x08])
     }
 
-    private func decrypt(_ ciphertext: Data, password: String) throws -> Data {
-        let material = deriveKeyAndInitializationVector(password: password)
-        let outputCapacity = ciphertext.count + kCCBlockSizeAES128
+    private func decrypt(_ container: RayconfigContainer, password: String) throws -> Data {
+        // Raycast hashes the UTF8 password once and uses the 32 byte digest as
+        // the AES key. The PBKDF2 and HMAC strings in the app binary belong to
+        // its embedded SQLCipher codec and are not used by rayconfig exports.
+        let key = Data(SHA256.hash(data: Data(password.utf8)))
+        let outputCapacity = container.ciphertext.count + kCCBlockSizeAES128
         var output = Data(count: outputCapacity)
         var outputLength = 0
         let status = output.withUnsafeMutableBytes { outputBytes in
-            ciphertext.withUnsafeBytes { ciphertextBytes in
-                material.key.withUnsafeBytes { keyBytes in
-                    material.initializationVector.withUnsafeBytes { vectorBytes in
+            container.ciphertext.withUnsafeBytes { ciphertextBytes in
+                key.withUnsafeBytes { keyBytes in
+                    container.initializationVector.withUnsafeBytes { vectorBytes in
                         CCCrypt(
                             CCOperation(kCCDecrypt),
                             CCAlgorithm(kCCAlgorithmAES),
                             CCOptions(kCCOptionPKCS7Padding),
                             keyBytes.baseAddress,
-                            material.key.count,
+                            key.count,
                             vectorBytes.baseAddress,
                             ciphertextBytes.baseAddress,
-                            ciphertext.count,
+                            container.ciphertext.count,
                             outputBytes.baseAddress,
                             outputCapacity,
                             &outputLength
@@ -131,23 +166,6 @@ public struct RayconfigReader: Sendable {
         }
         output.removeSubrange(outputLength..<output.count)
         return output
-    }
-
-    private func deriveKeyAndInitializationVector(password: String) -> (key: Data, initializationVector: Data) {
-        let passwordData = Data(password.utf8)
-        var material = Data()
-        var previous = Data()
-        while material.count < 48 {
-            var hasher = SHA256()
-            hasher.update(data: previous)
-            hasher.update(data: passwordData)
-            previous = Data(hasher.finalize())
-            material.append(previous)
-        }
-        return (
-            key: material.prefix(32),
-            initializationVector: material.dropFirst(32).prefix(16)
-        )
     }
 
     private func gunzip(_ data: Data) throws -> Data {

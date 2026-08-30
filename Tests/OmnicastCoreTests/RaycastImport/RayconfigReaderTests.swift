@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Foundation
-import OmnicastCore
+@testable import OmnicastCore
 import XCTest
 
 final class RayconfigReaderTests: XCTestCase {
@@ -32,7 +32,7 @@ final class RayconfigReaderTests: XCTestCase {
         }
     }
 
-    func testReportsMalformedCiphertextAsCorrupt() {
+    func testReportsMalformedContainerAsCorrupt() {
         XCTAssertThrowsError(try RayconfigReader().read(data: Data([1, 2, 3]), password: "password")) { error in
             guard case .corruptFile = error as? RayconfigReaderError else {
                 return XCTFail("Expected a corrupt file error")
@@ -40,27 +40,58 @@ final class RayconfigReaderTests: XCTestCase {
         }
     }
 
-    func testSyntheticFixtureUsesTheOpenSSLFormat() throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let inputURL = directory.appendingPathComponent("fixture.rayconfig")
-        let outputURL = directory.appendingPathComponent("fixture.gzip")
+    func testParsesClassicContainerOffsets() throws {
+        let initializationVector = Data((0..<16).map(UInt8.init))
+        let ciphertext = Data(repeating: 0xA5, count: 32)
+
+        let container = try RayconfigContainer.parse(initializationVector + ciphertext)
+
+        XCTAssertEqual(container.version, .classic)
+        XCTAssertEqual(RayconfigContainer.initializationVectorRange, 0..<16)
+        XCTAssertEqual(RayconfigContainer.ciphertextOffset, 16)
+        XCTAssertNil(RayconfigContainer.saltRange)
+        XCTAssertEqual(RayconfigContainer.hmacLength, 0)
+        XCTAssertEqual(container.initializationVector, initializationVector)
+        XCTAssertEqual(container.ciphertext, ciphertext)
+    }
+
+    func testRejectsContainerWithoutOneCiphertextBlock() {
+        let initializationVectorOnly = Data(repeating: 0, count: 16)
+
+        XCTAssertThrowsError(try RayconfigContainer.parse(initializationVectorOnly)) { error in
+            guard case .corruptFile = error as? RayconfigReaderError else {
+                return XCTFail("Expected a corrupt file error")
+            }
+        }
+    }
+
+    func testRejectsMisalignedCiphertext() {
+        let malformed = Data(repeating: 0, count: 33)
+
+        XCTAssertThrowsError(try RayconfigContainer.parse(malformed)) { error in
+            guard case .corruptFile = error as? RayconfigReaderError else {
+                return XCTFail("Expected a corrupt file error")
+            }
+        }
+    }
+
+    func testSyntheticFixtureUsesRaycastContainerLayout() throws {
         let payload = try JSONEncoder().encode(RaycastBackup(raycastVersion: "1.99.0"))
-        try RayconfigFixtureWriter.make(payload: payload, password: "format password")
-            .write(to: inputURL)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
-        process.arguments = [
-            "enc", "-d", "-aes-256-cbc", "-nosalt",
-            "-in", inputURL.path, "-out", outputURL.path,
-            "-k", "format password"
-        ]
-        process.standardError = Pipe()
+        let fixture = try RayconfigFixtureWriter.make(payload: payload, password: "format password")
+        let container = try RayconfigContainer.parse(fixture)
 
-        try process.run()
-        process.waitUntilExit()
+        XCTAssertEqual(container.initializationVector, RayconfigFixtureWriter.defaultInitializationVector)
+        XCTAssertTrue(container.ciphertext.count.isMultiple(of: 16))
+    }
 
-        XCTAssertEqual(process.terminationStatus, 0)
-        XCTAssertEqual(Array(try Data(contentsOf: outputURL).prefix(3)), [0x1F, 0x8B, 0x08])
+    func testReportsZipPayloadAsUnsupportedVersion() throws {
+        let fixture = try RayconfigFixtureWriter.makeUncompressed(
+            payload: Data([0x50, 0x4B, 0x03, 0x04]),
+            password: "format password"
+        )
+
+        XCTAssertThrowsError(try RayconfigReader().read(data: fixture, password: "format password")) { error in
+            XCTAssertEqual(error as? RayconfigReaderError, .unsupportedVersion)
+        }
     }
 }
