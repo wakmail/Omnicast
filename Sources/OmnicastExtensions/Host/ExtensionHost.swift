@@ -42,6 +42,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
     private let router: ExtensionBridgeRouter
     private let nodeBridge = ExtensionNodeBridge()
     private weak var webView: WKWebView?
+    private var commandBootScript: String?
 
     public private(set) var consoleMessages: [ExtensionConsoleMessage] = []
     public private(set) var renderedItemCount = 0
@@ -170,17 +171,33 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         callbacks.showToast(error.localizedDescription)
     }
 
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard let commandBootScript else { return }
+        webView.evaluateJavaScript(commandBootScript) { [weak self] _, error in
+            guard let self, let error else { return }
+            let nsError = error as NSError
+            let message = nsError.userInfo["WKJavaScriptExceptionMessage"] as? String
+                ?? nsError.localizedDescription
+            self.captureLog([
+                "type": "console",
+                "level": "error",
+                "message": message
+            ])
+        }
+    }
+
     private func load(into webView: WKWebView) async {
         do {
             let scripts = try await makeScripts()
             let controller = webView.configuration.userContentController
-            for source in scripts {
+            for source in scripts.userScripts {
                 controller.addUserScript(WKUserScript(
                     source: source,
                     injectionTime: .atDocumentEnd,
                     forMainFrameOnly: true
                 ))
             }
+            commandBootScript = scripts.boot
             webView.loadHTMLString(Self.html, baseURL: installedExtension.directoryURL)
         } catch {
             callbacks.showToast(error.localizedDescription)
@@ -191,7 +208,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         }
     }
 
-    private func makeScripts() async throws -> [String] {
+    private func makeScripts() async throws -> (userScripts: [String], boot: String) {
         let react = try resource(named: "react.production.min", extension: "js")
         let reactDOM = try resource(named: "react-dom.production.min", extension: "js")
         let nodeShim = try resource(named: "NodeShim", extension: "js")
@@ -246,7 +263,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             .appendingPathComponent("\(command.name).js")
         let bundle = try String(contentsOf: bundleURL, encoding: .utf8)
         let boot = try bootScript(bundle: bundle)
-        return [react, reactDOM, contextScript, nodeShim, shim, boot]
+        return ([react, reactDOM, contextScript, nodeShim, shim], boot)
     }
 
     private func resolvedPreferences(
@@ -295,7 +312,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             }
             if(name==="@raycast/api")return globalThis.__raycastAPI;
             if(globalThis.__omnicastModules&&name in globalThis.__omnicastModules)return globalThis.__omnicastModules[name];
-            throw new Error("Cannot require unknown module \""+name+"\"");
+            throw new Error('Cannot require unknown module ' + JSON.stringify(name));
           }
           try{
             var module={exports:{}};
