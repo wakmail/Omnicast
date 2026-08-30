@@ -1,0 +1,53 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "gitlab",
+  "title": "GitLab",
+  "description": "Search and manage GitLab projects, issues, and merge requests",
+  "icon": "gitlab.png",
+  "author": "tonka3000",
+  "platforms": ["macOS", "Windows"],
+  "categories": ["Developer Tools"],
+  "preferences": [
+    {
+      "name": "primaryaction",
+      "type": "dropdown",
+      "title": "Preferred Primary Action",
+      "required": true,
+      "default": "detail",
+      "data": [
+        { "title": "Open in Browser", "value": "browser" },
+        { "title": "Open in Raycast", "value": "detail" }
+      ]
+    },
+    {
+      "name": "poptoroot",
+      "type": "checkbox",
+      "label": "Pop to Root after external action",
+      "required": false,
+      "default": false,
+      "title": "Behavior"
+    }
+  ],
+  "commands": [
+    {
+      "name": "search-projects",
+      "title": "Search Projects",
+      "description": "Search GitLab projects",
+      "mode": "view"
+    },
+    {
+      "name": "search-issues",
+      "title": "Search Issues",
+      "description": "Search GitLab issues",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "query",
+          "type": "text",
+          "placeholder": "Issue search text",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

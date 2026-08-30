@@ -1,0 +1,60 @@
+{
+  "list-processes": {
+    "type": "object",
+    "properties": {
+      "searchTerm": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional array of search terms to filter processes. For single process search, provide an array with one element. Example: [\"Logi\"] will find all processes containing \"Logi\" in their name Example: [\"Chrome\", \"Firefox\"] will find all processes containing either \"Chrome\" or \"Firefox\""
+      },
+      "sortBy": {
+        "description": "Field to sort by (defaults to 'mem')"
+      },
+      "sortOrder": {
+        "description": "Sort order (defaults to 'desc')"
+      }
+    }
+  },
+  "kill-process": {
+    "type": "object",
+    "properties": {
+      "processName": {
+        "type": "string",
+        "description": "App name to kill"
+      },
+      "id": {
+        "type": "number",
+        "description": "Process ID to kill"
+      },
+      "path": {
+        "type": "string",
+        "description": "Path to the process to kill"
+      },
+      "force": {
+        "type": "boolean",
+        "description": "Whether to force kill the process (requires elevated privileges)"
+      }
+    },
+    "required": [
+      "id"
+    ]
+  },
+  "killall-process": {
+    "type": "object",
+    "properties": {
+      "processName": {
+        "type": "string",
+        "description": "Exact process name to kill all instances of (e.g. \"node\", \"Google Chrome Helper\")"
+      },
+      "force": {
+        "type": "boolean",
+        "description": "Whether to force kill with elevated privileges"
+      }
+    },
+    "required": [
+      "processName"
+    ]
+  }
+}
