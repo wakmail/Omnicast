@@ -243,7 +243,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 AICommandsProvider { [weak self] destination in
                     self?.aiController?.show(destination)
                 },
-                ExtensionStoreCommandsProvider(),
                 ExtensionCommandsProvider(registry: extensionRegistry) { [weak self] installed, command in
                     self?.showExtension(installed: installed, command: command)
                 }
@@ -283,10 +282,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     emojiPasteService: emojiPasteService,
                     colorHistoryStore: colorHistoryStore,
                     menuItemIndex: menuItemIndex,
-                    extensionStoreCatalog: extensionStoreCatalog,
-                    extensionRegistry: extensionRegistry,
-                    navigationCoordinator: navigationCoordinator,
-                    onExtensionRegistryChanged: { [weak self] in self?.refreshCommands() },
                     onHide: { [weak panel] returningFocus in
                         panel?.hide(returningFocus: returningFocus)
                     },
@@ -590,8 +585,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 callbacks: ExtensionHostCallbacks(
                     showToast: { [weak self] message in self?.toastCenter.show(message) },
                     showHUD: { [weak self] message in self?.toastCenter.show(message) },
-                    closeMainWindow: { [weak self] in self?.navigationCoordinator.pop() }
-                )
+                    closeMainWindow: { [weak self] in self?.navigationCoordinator.pop() },
+                    extensionRegistryChanged: { [weak self] in self?.refreshCommands() }
+                ),
+                storeCatalog: extensionStoreCatalog,
+                extensionRegistry: extensionRegistry
             )
             extensionHost?.stop()
             extensionHost = host

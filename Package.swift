@@ -32,7 +32,14 @@ let package = Package(
         .target(
             name: "OmnicastExtensions",
             dependencies: ["OmnicastCore"],
-            resources: [.process("Resources")]
+            resources: [
+                .process("Resources/Licenses"),
+                .process("Resources/NodeShim.js"),
+                .process("Resources/RaycastShim.js"),
+                .process("Resources/react-dom.production.min.js"),
+                .process("Resources/react.production.min.js"),
+                .copy("Resources/builtin")
+            ]
         ),
         .executableTarget(
             name: "Omnicast",

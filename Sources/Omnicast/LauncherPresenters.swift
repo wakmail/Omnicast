@@ -17,10 +17,6 @@ func makeLauncherPresentingCommands(
     emojiPasteService: EmojiPasteService,
     colorHistoryStore: ColorHistoryStore,
     menuItemIndex: MenuItemIndex,
-    extensionStoreCatalog: RaycastStoreCatalog,
-    extensionRegistry: ExtensionRegistry,
-    navigationCoordinator: LauncherNavigationCoordinator,
-    onExtensionRegistryChanged: @escaping @MainActor () -> Void,
     onHide: @escaping (Bool) -> Void,
     raycastImporter: RaycastImporter
 ) -> [String: LauncherCommandPresenter] {
@@ -109,14 +105,6 @@ func makeLauncherPresentingCommands(
                 initialQuery: query,
                 onQueryChange: { [weak model] in model?.updateQuery($0) },
                 onKey: { [weak model] key in model?.handle(key) ?? false }
-            )
-        },
-        "extension:store": { _, _ in
-            ExtensionStoreLauncherPresentation.presentedView(
-                catalog: extensionStoreCatalog,
-                registry: extensionRegistry,
-                navigation: navigationCoordinator,
-                onRegistryChanged: onExtensionRegistryChanged
             )
         }
     ]

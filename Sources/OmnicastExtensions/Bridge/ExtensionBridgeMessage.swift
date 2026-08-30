@@ -24,6 +24,9 @@ public enum ExtensionBridgeOperation: String, Codable, Sendable {
     case fileSystemWriteFile
     case fileSystemMakeDirectory
     case fetch
+    case storeCatalog
+    case storeInstall
+    case storeInstalled
 }
 
 public struct ExtensionBridgeRequest: Codable, Equatable, Sendable {

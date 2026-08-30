@@ -26,22 +26,37 @@ public struct InstalledExtension: Equatable, Sendable {
     public let slug: String
     public let directoryURL: URL
     public let manifest: ExtensionManifest
+    public let isBuiltin: Bool
 
-    public init(slug: String, directoryURL: URL, manifest: ExtensionManifest) {
+    public init(
+        slug: String,
+        directoryURL: URL,
+        manifest: ExtensionManifest,
+        isBuiltin: Bool = false
+    ) {
         self.slug = slug
         self.directoryURL = directoryURL
         self.manifest = manifest
+        self.isBuiltin = isBuiltin
     }
 
     public var commands: [InstalledExtensionCommand] {
         manifest.commands.map { command in
-            InstalledExtensionCommand(
+            let bundleURL: URL
+            if isBuiltin {
+                bundleURL = directoryURL.appendingPathComponent(
+                    command.source ?? "\(command.name).js"
+                )
+            } else {
+                bundleURL = directoryURL
+                    .appendingPathComponent(".sc-build", isDirectory: true)
+                    .appendingPathComponent("\(command.name).js")
+            }
+            return InstalledExtensionCommand(
                 extensionSlug: slug,
                 manifest: command,
                 extensionDirectoryURL: directoryURL,
-                bundleURL: directoryURL
-                    .appendingPathComponent(".sc-build", isDirectory: true)
-                    .appendingPathComponent("\(command.name).js")
+                bundleURL: bundleURL
             )
         }
     }
@@ -54,6 +69,8 @@ public enum ExtensionRegistryError: LocalizedError {
     case missingCommandBundle(String)
     case noCommands
     case couldNotLocateExtractedExtension
+    case missingBuiltinStore
+    case builtinExtensionCannotBeModified(String)
 
     public var errorDescription: String? {
         switch self {
@@ -69,11 +86,18 @@ public enum ExtensionRegistryError: LocalizedError {
             "The extension manifest does not declare any commands"
         case .couldNotLocateExtractedExtension:
             "The extracted extension directory could not be located"
+        case .missingBuiltinStore:
+            "The builtin Store extension bundle is missing"
+        case .builtinExtensionCannotBeModified(let slug):
+            "The builtin extension cannot be modified: \(slug)"
         }
     }
 }
 
 public actor ExtensionRegistry {
+    public static let builtinStoreSlug = "store"
+    public static let builtinStoreCommandName = "index"
+
     public let extensionsDirectoryURL: URL
 
     private let store: any RaycastStoreServing
@@ -93,15 +117,19 @@ public actor ExtensionRegistry {
     }
 
     public func listInstalled() throws -> [InstalledExtension] {
+        let builtin = try builtinStoreExtension()
         guard fileManager.fileExists(atPath: extensionsDirectoryURL.path) else {
-            return []
+            return [builtin]
         }
         let urls = try fileManager.contentsOfDirectory(
             at: extensionsDirectoryURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
-        return try urls.compactMap { directoryURL in
+        let installed: [InstalledExtension] = try urls.compactMap { directoryURL in
+            guard directoryURL.lastPathComponent != Self.builtinStoreSlug else {
+                return nil
+            }
             let values = try directoryURL.resourceValues(forKeys: [.isDirectoryKey])
             guard values.isDirectory == true else { return nil }
             let manifestURL = directoryURL.appendingPathComponent("package.json")
@@ -112,11 +140,17 @@ public actor ExtensionRegistry {
                 directoryURL: directoryURL,
                 manifest: manifest
             )
-        }.sorted { $0.manifest.title.localizedCaseInsensitiveCompare($1.manifest.title) == .orderedAscending }
+        }
+        return ([builtin] + installed).sorted {
+            $0.manifest.title.localizedCaseInsensitiveCompare($1.manifest.title) == .orderedAscending
+        }
     }
 
     public func installedExtension(slug: String) throws -> InstalledExtension? {
         try validate(slug: slug)
+        if slug == Self.builtinStoreSlug {
+            return try builtinStoreExtension()
+        }
         let directoryURL = extensionsDirectoryURL.appendingPathComponent(slug, isDirectory: true)
         let manifestURL = directoryURL.appendingPathComponent("package.json")
         guard fileManager.fileExists(atPath: manifestURL.path) else { return nil }
@@ -126,6 +160,9 @@ public actor ExtensionRegistry {
 
     public func install(name: String) async throws -> InstalledExtension {
         try validate(slug: name)
+        guard name != Self.builtinStoreSlug else {
+            throw ExtensionRegistryError.builtinExtensionCannotBeModified(name)
+        }
         let bundle = try await store.downloadBundle(for: name)
         guard bundle.type == "bundle" else {
             throw RaycastStoreError.sourceArchiveUnsupported
@@ -204,6 +241,9 @@ public actor ExtensionRegistry {
 
     public func uninstall(slug: String) throws {
         try validate(slug: slug)
+        guard slug != Self.builtinStoreSlug else {
+            throw ExtensionRegistryError.builtinExtensionCannotBeModified(slug)
+        }
         let directoryURL = extensionsDirectoryURL.appendingPathComponent(slug, isDirectory: true)
         if fileManager.fileExists(atPath: directoryURL.path) {
             try fileManager.removeItem(at: directoryURL)
@@ -215,6 +255,36 @@ public actor ExtensionRegistry {
         if slug.isEmpty || slug.rangeOfCharacter(from: allowed.inverted) != nil {
             throw ExtensionRegistryError.invalidSlug(slug)
         }
+    }
+
+    private func builtinStoreExtension() throws -> InstalledExtension {
+        guard let manifestURL = Bundle.module.url(
+            forResource: "package",
+            withExtension: "json",
+            subdirectory: "builtin/store"
+        ) else {
+            throw ExtensionRegistryError.missingBuiltinStore
+        }
+        let directoryURL = manifestURL.deletingLastPathComponent()
+        let manifest = try ExtensionManifest.decode(from: Data(contentsOf: manifestURL))
+        guard manifest.name == Self.builtinStoreSlug,
+              manifest.commands.contains(where: {
+                  $0.name == Self.builtinStoreCommandName
+              }) else {
+            throw ExtensionRegistryError.missingBuiltinStore
+        }
+        let installed = InstalledExtension(
+            slug: Self.builtinStoreSlug,
+            directoryURL: directoryURL,
+            manifest: manifest,
+            isBuiltin: true
+        )
+        guard installed.commands.allSatisfy({
+            fileManager.fileExists(atPath: $0.bundleURL.path)
+        }) else {
+            throw ExtensionRegistryError.missingBuiltinStore
+        }
+        return installed
     }
 
     private func locateExtension(in rootURL: URL, preferredSlug: String) throws -> URL {

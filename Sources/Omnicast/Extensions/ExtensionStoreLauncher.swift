@@ -24,6 +24,7 @@ struct ExtensionStoreCommandsProvider: CommandProvider {
 }
 
 @MainActor
+// Native fallback retained for recovery if the hosted Store cannot launch.
 enum ExtensionStoreLauncherPresentation {
     static func presentedView(
         catalog: RaycastStoreCatalog,

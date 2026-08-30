@@ -53,7 +53,9 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         directoryURL: URL,
         clipboard: any ClipboardService,
         opener: any OpenerService,
-        callbacks: ExtensionHostCallbacks
+        callbacks: ExtensionHostCallbacks,
+        storeCatalog: RaycastStoreCatalog? = nil,
+        extensionRegistry: ExtensionRegistry? = nil
     ) throws {
         guard let command = installedExtension.manifest.commands.first(where: {
             $0.name == commandName
@@ -70,7 +72,9 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             persistence: persistence,
             clipboard: clipboard,
             opener: opener,
-            callbacks: callbacks
+            callbacks: callbacks,
+            storeCatalog: storeCatalog,
+            extensionRegistry: extensionRegistry
         )
         super.init()
     }
@@ -258,12 +262,17 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             ])
         ])
         let contextScript = "globalThis.__omnicastContext=\(try javascriptLiteral(context));"
-        let bundleURL = installedExtension.directoryURL
-            .appendingPathComponent(".sc-build", isDirectory: true)
-            .appendingPathComponent("\(command.name).js")
+        let storeScript = installedExtension.slug == ExtensionRegistry.builtinStoreSlug
+            ? Self.storeNamespaceScript
+            : ""
+        guard let bundleURL = installedExtension.commands.first(where: {
+            $0.manifest.name == command.name
+        })?.bundleURL else {
+            throw ExtensionHostError.commandNotFound(command.name)
+        }
         let bundle = try String(contentsOf: bundleURL, encoding: .utf8)
         let boot = try bootScript(bundle: bundle)
-        return ([react, reactDOM, contextScript, nodeShim, shim], boot)
+        return ([react, reactDOM, contextScript, nodeShim, shim, storeScript], boot)
     }
 
     private func resolvedPreferences(
@@ -391,6 +400,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         .raycastLoading { color: rgba(255,255,255,.74); }
         .raycastListBody { height: calc(100% - 56px); overflow: auto; padding: 6px; }
         .raycastDetail { height: 100%; overflow: auto; padding: 16px; }
+        .raycastDetail > .raycastActions { display: flex; position: static; float: right; margin: 0 0 12px 12px; }
         .raycastSection h3 { display: flex; justify-content: space-between; margin: 8px 10px 4px; color: rgba(255,255,255,.74); font-size: 11px; font-weight: 600; }
         .raycastSection h3 small { font-weight: 400; }
         .raycastListItem { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 8px 10px; border-radius: 8px; }
@@ -411,6 +421,14 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
     </head>
     <body><main id="root"></main></body>
     </html>
+    """
+
+    private static let storeNamespaceScript = """
+    globalThis.omnicast={store:{
+      catalog:function(){return globalThis.__omnicastBridge("storeCatalog",{});},
+      install:function(name){return globalThis.__omnicastBridge("storeInstall",{name:String(name)});},
+      installed:function(){return globalThis.__omnicastBridge("storeInstalled",{});}
+    }};
     """
 
     private static func errorHTML(_ message: String) -> String {

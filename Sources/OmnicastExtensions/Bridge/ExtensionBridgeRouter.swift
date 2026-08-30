@@ -8,21 +8,26 @@ public struct ExtensionHostCallbacks {
     public var showToast: (String) -> Void
     public var showHUD: (String) -> Void
     public var closeMainWindow: () -> Void
+    public var extensionRegistryChanged: () -> Void
 
     public init(
         showToast: @escaping (String) -> Void = { _ in },
         showHUD: @escaping (String) -> Void = { _ in },
-        closeMainWindow: @escaping () -> Void = {}
+        closeMainWindow: @escaping () -> Void = {},
+        extensionRegistryChanged: @escaping () -> Void = {}
     ) {
         self.showToast = showToast
         self.showHUD = showHUD
         self.closeMainWindow = closeMainWindow
+        self.extensionRegistryChanged = extensionRegistryChanged
     }
 }
 
 public enum ExtensionBridgeError: LocalizedError {
     case missingPayloadValue(String)
     case invalidURL(String)
+    case storeAccessDenied
+    case storeServicesUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -30,6 +35,10 @@ public enum ExtensionBridgeError: LocalizedError {
             "The bridge message is missing \(name)"
         case .invalidURL(let value):
             "The bridge message contains an invalid URL: \(value)"
+        case .storeAccessDenied:
+            "The Store bridge is available only to the builtin Store extension"
+        case .storeServicesUnavailable:
+            "The Store bridge services are unavailable"
         }
     }
 }
@@ -42,6 +51,8 @@ public final class ExtensionBridgeRouter {
     private let clipboard: any ClipboardService
     private let opener: any OpenerService
     private let callbacks: ExtensionHostCallbacks
+    private let storeCatalog: RaycastStoreCatalog?
+    private let extensionRegistry: ExtensionRegistry?
     private let nodeBridge = ExtensionNodeBridge()
 
     public init(
@@ -49,13 +60,17 @@ public final class ExtensionBridgeRouter {
         persistence: ExtensionPersistence,
         clipboard: any ClipboardService,
         opener: any OpenerService,
-        callbacks: ExtensionHostCallbacks
+        callbacks: ExtensionHostCallbacks,
+        storeCatalog: RaycastStoreCatalog? = nil,
+        extensionRegistry: ExtensionRegistry? = nil
     ) {
         self.extensionSlug = extensionSlug
         self.persistence = persistence
         self.clipboard = clipboard
         self.opener = opener
         self.callbacks = callbacks
+        self.storeCatalog = storeCatalog
+        self.extensionRegistry = extensionRegistry
     }
 
     public func route(_ request: ExtensionBridgeRequest) async -> ExtensionBridgeResponse {
@@ -160,7 +175,67 @@ public final class ExtensionBridgeRouter {
                 id: request.id,
                 result: try await nodeBridge.fetch(payload: request.payload)
             )
+        case .storeCatalog:
+            let (catalog, _) = try storeServices()
+            let extensions = try await catalog.extensions()
+            return .success(
+                id: request.id,
+                result: .array(extensions.map(storeExtensionValue))
+            )
+        case .storeInstall:
+            let (_, registry) = try storeServices()
+            let installed = try await registry.install(
+                name: try string("name", in: request.payload)
+            )
+            callbacks.extensionRegistryChanged()
+            return .success(
+                id: request.id,
+                result: .object([
+                    "name": .string(installed.slug),
+                    "title": .string(installed.manifest.title)
+                ])
+            )
+        case .storeInstalled:
+            let (_, registry) = try storeServices()
+            let installed = try await registry.listInstalled()
+            return .success(
+                id: request.id,
+                result: .array(installed.map { .string($0.slug) })
+            )
         }
+    }
+
+    private func storeServices() throws -> (RaycastStoreCatalog, ExtensionRegistry) {
+        guard extensionSlug == ExtensionRegistry.builtinStoreSlug else {
+            throw ExtensionBridgeError.storeAccessDenied
+        }
+        guard let storeCatalog, let extensionRegistry else {
+            throw ExtensionBridgeError.storeServicesUnavailable
+        }
+        return (storeCatalog, extensionRegistry)
+    }
+
+    private func storeExtensionValue(_ value: RaycastStoreExtension) -> JSONValue {
+        .object([
+            "name": .string(value.name),
+            "title": .string(value.title),
+            "description": .string(value.description),
+            "author": .string(value.author),
+            "iconURL": value.iconURL.map { .string($0.absoluteString) } ?? .null,
+            "screenshots": .array(value.screenshotURLs.map {
+                .string($0.absoluteString)
+            }),
+            "categories": .array(value.categories.map(JSONValue.string)),
+            "platforms": .array(value.platforms.map(JSONValue.string)),
+            "commands": .array(value.commands.map { command in
+                .object([
+                    "name": .string(command.name),
+                    "title": .string(command.title),
+                    "description": .string(command.description)
+                ])
+            }),
+            "installCount": .number(Double(value.installCount))
+        ])
     }
 
     private func string(_ key: String, in payload: [String: JSONValue]) throws -> String {
