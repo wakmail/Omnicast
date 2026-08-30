@@ -24,5 +24,8 @@ public struct ExtensionHostView: NSViewRepresentable {
         nsView.configuration.userContentController.removeScriptMessageHandler(
             forName: "omnicast"
         )
+        nsView.configuration.userContentController.removeScriptMessageHandler(
+            forName: "log"
+        )
     }
 }

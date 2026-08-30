@@ -42,6 +42,7 @@ public final class ExtensionBridgeRouter {
     private let clipboard: any ClipboardService
     private let opener: any OpenerService
     private let callbacks: ExtensionHostCallbacks
+    private let nodeBridge = ExtensionNodeBridge()
 
     public init(
         extensionSlug: String,
@@ -131,6 +132,34 @@ public final class ExtensionBridgeRouter {
         case .closeMainWindow:
             callbacks.closeMainWindow()
             return .success(id: request.id)
+        case .childProcessExec:
+            return .success(
+                id: request.id,
+                result: try await nodeBridge.executeProcess(payload: request.payload)
+            )
+        case .fileSystemAccess:
+            return .success(id: request.id, result: try nodeBridge.access(payload: request.payload))
+        case .fileSystemReadFile:
+            return .success(id: request.id, result: try nodeBridge.readFile(payload: request.payload))
+        case .fileSystemStat:
+            return .success(id: request.id, result: try nodeBridge.stat(payload: request.payload))
+        case .fileSystemReadDirectory:
+            return .success(
+                id: request.id,
+                result: try nodeBridge.readDirectory(payload: request.payload)
+            )
+        case .fileSystemWriteFile:
+            return .success(id: request.id, result: try nodeBridge.writeFile(payload: request.payload))
+        case .fileSystemMakeDirectory:
+            return .success(
+                id: request.id,
+                result: try nodeBridge.makeDirectory(payload: request.payload)
+            )
+        case .fetch:
+            return .success(
+                id: request.id,
+                result: try await nodeBridge.fetch(payload: request.payload)
+            )
         }
     }
 

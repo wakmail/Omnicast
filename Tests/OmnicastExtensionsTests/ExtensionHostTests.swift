@@ -7,8 +7,27 @@ import XCTest
 @MainActor
 final class ExtensionHostTests: XCTestCase {
     func testFixtureCommandRendersInsideWebView() async throws {
+        let harness = try await renderFixture()
+        defer { harness.stop() }
+
+        XCTAssertGreaterThan(harness.host.renderedItemCount, 0)
+        let htmlCount = try await harness.webView.evaluateJavaScript(
+            "document.querySelectorAll('.raycastListItem').length"
+        ) as? NSNumber
+        XCTAssertGreaterThan(htmlCount?.intValue ?? 0, 0)
+    }
+
+    func testFixtureCommandCapturesNoConsoleErrors() async throws {
+        let harness = try await renderFixture()
+        defer { harness.stop() }
+
+        let errors = harness.host.consoleMessages.filter { $0.level == "error" }
+        XCTAssertTrue(errors.isEmpty, errors.map(\.message).joined(separator: "\n"))
+    }
+
+    private func renderFixture() async throws -> HostHarness {
         let fixtureURL = try XCTUnwrap(Bundle.module.url(
-            forResource: "sample-extension",
+            forResource: "kill-process",
             withExtension: nil,
             subdirectory: "Fixtures"
         ))
@@ -16,7 +35,7 @@ final class ExtensionHostTests: XCTestCase {
             from: Data(contentsOf: fixtureURL.appendingPathComponent("package.json"))
         )
         let installed = InstalledExtension(
-            slug: "sample-extension",
+            slug: "kill-process",
             directoryURL: fixtureURL,
             manifest: manifest
         )
@@ -24,34 +43,45 @@ final class ExtensionHostTests: XCTestCase {
             "OmnicastExtensionHostTests.\(UUID().uuidString)",
             isDirectory: true
         )
-        defer { try? FileManager.default.removeItem(at: dataDirectory) }
         let host = try ExtensionHost(
             installedExtension: installed,
-            commandName: "show",
+            commandName: "index",
             directoryURL: dataDirectory
         )
         let webView = host.makeWebView()
         var contentProcessUnavailable = false
 
-        for _ in 0..<50 {
+        for _ in 0..<200 {
             try await Task.sleep(nanoseconds: 50_000_000)
+            if host.renderedItemCount > 0 {
+                try await Task.sleep(nanoseconds: 100_000_000)
+                return HostHarness(host: host, webView: webView, dataDirectory: dataDirectory)
+            }
             do {
-                let text = try await webView.evaluateJavaScript(
-                    "String(document.body ? document.body.innerText || '' : '')"
-                ) as? String
-                if text?.contains("Fixture Result") == true {
-                    host.stop()
-                    return
-                }
+                _ = try await webView.evaluateJavaScript("document.readyState")
             } catch let error as NSError where error.domain == "WKErrorDomain" && error.code == 5 {
                 contentProcessUnavailable = true
-                continue
             }
         }
+        let messages = host.consoleMessages.map { "\($0.level): \($0.message)" }.joined(separator: "\n")
         host.stop()
+        try? FileManager.default.removeItem(at: dataDirectory)
         if contentProcessUnavailable {
             throw XCTSkip("The WebKit content process is unavailable in this test sandbox")
         }
-        XCTFail("The fixture command did not render")
+        XCTFail("The fixture command did not report rendered List items\n\(messages)")
+        return HostHarness(host: host, webView: webView, dataDirectory: dataDirectory)
+    }
+}
+
+@MainActor
+private struct HostHarness {
+    let host: ExtensionHost
+    let webView: WKWebView
+    let dataDirectory: URL
+
+    func stop() {
+        host.stop()
+        try? FileManager.default.removeItem(at: dataDirectory)
     }
 }

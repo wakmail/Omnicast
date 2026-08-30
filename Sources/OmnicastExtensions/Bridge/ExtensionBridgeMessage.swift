@@ -16,6 +16,14 @@ public enum ExtensionBridgeOperation: String, Codable, Sendable {
     case toast
     case hud
     case closeMainWindow
+    case childProcessExec
+    case fileSystemAccess
+    case fileSystemReadFile
+    case fileSystemStat
+    case fileSystemReadDirectory
+    case fileSystemWriteFile
+    case fileSystemMakeDirectory
+    case fetch
 }
 
 public struct ExtensionBridgeRequest: Codable, Equatable, Sendable {
