@@ -47,6 +47,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var theme: AppTheme
     public var launchAtLogin: Bool
     public var hyperKey: HyperKeySettings
+    public var snippetsEnabled: Bool
     public var launcherPosition: LauncherWindowPosition?
     public var hasShownOnboarding: Bool
     public var defaultAIProvider: AIProviderIdentifier
@@ -59,6 +60,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         theme: AppTheme = .system,
         launchAtLogin: Bool = false,
         hyperKey: HyperKeySettings = HyperKeySettings(),
+        snippetsEnabled: Bool = false,
         launcherPosition: LauncherWindowPosition? = nil,
         hasShownOnboarding: Bool = false,
         defaultAIProvider: AIProviderIdentifier = .openAI,
@@ -70,6 +72,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.theme = theme
         self.launchAtLogin = launchAtLogin
         self.hyperKey = hyperKey
+        self.snippetsEnabled = snippetsEnabled
         self.launcherPosition = launcherPosition
         self.hasShownOnboarding = hasShownOnboarding
         self.defaultAIProvider = defaultAIProvider
@@ -83,6 +86,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case theme
         case launchAtLogin
         case hyperKey
+        case snippetsEnabled
         case launcherPosition
         case hasShownOnboarding
         case defaultAIProvider
@@ -98,6 +102,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         launchAtLogin = try values.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         hyperKey = try values.decodeIfPresent(HyperKeySettings.self, forKey: .hyperKey)
             ?? HyperKeySettings()
+        snippetsEnabled = try values.decodeIfPresent(Bool.self, forKey: .snippetsEnabled) ?? false
         launcherPosition = try values.decodeIfPresent(
             LauncherWindowPosition.self,
             forKey: .launcherPosition

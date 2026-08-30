@@ -4,59 +4,44 @@ import OmnicastCore
 import SwiftUI
 
 public struct PermissionsView: View {
-    private let windowAdjuster: WindowAdjuster
-    private let hyperKeyManager: HyperKeyManager
-    private let snippetExpander: SnippetExpander?
-    @State private var refreshToken = UUID()
-    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var permissions: PermissionsService
 
     @MainActor
-    public init(
-        windowAdjuster: WindowAdjuster,
-        hyperKeyManager: HyperKeyManager,
-        snippetExpander: SnippetExpander? = nil
-    ) {
-        self.windowAdjuster = windowAdjuster
-        self.hyperKeyManager = hyperKeyManager
-        self.snippetExpander = snippetExpander
+    public init(permissions: PermissionsService) {
+        self.permissions = permissions
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: LauncherTheme.Metrics.footerGroupSpacing) {
-            Text("Permissions")
-                .font(LauncherTheme.Typography.search)
-                .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+        Form {
+            Section {
+                Text("Permissions are requested only when you choose a feature that needs them.")
+                    .foregroundStyle(.secondary)
+            }
 
-            Text("Omnicast uses these permissions for window commands, the Hyper key, and snippet expansion.")
-                .font(LauncherTheme.Typography.rowSubtitle)
-                .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+            Section {
+                permissionRow(
+                    title: "Accessibility",
+                    detail: "Used by window commands and snippet insertion.",
+                    granted: permissions.accessibility,
+                    request: permissions.requestAccessibility
+                )
+                permissionRow(
+                    title: "Input Monitoring",
+                    detail: "Used by snippet keyword listening and the Hyper key.",
+                    granted: permissions.inputMonitoring,
+                    request: permissions.requestInputMonitoring
+                )
+            }
 
-            permissionRow(
-                title: "Accessibility",
-                detail: "Move windows and expand snippets",
-                granted: windowAdjuster.accessibilityGranted,
-                request: {
-                    _ = windowAdjuster.requestAccessibility()
-                    refresh()
+            Section {
+                Button("Open System Settings") {
+                    permissions.openSystemSettings()
                 }
-            )
-
-            permissionRow(
-                title: "Input Monitoring",
-                detail: "Read Hyper key and snippet keystrokes",
-                granted: hyperKeyManager.inputMonitoringGranted,
-                request: {
-                    _ = hyperKeyManager.requestInputMonitoring()
-                    snippetExpander?.requestPermission()
-                    refresh()
-                }
-            )
-
-            Button("Refresh Status", action: refresh)
-                .buttonStyle(.bordered)
+            }
         }
+        .formStyle(.grouped)
         .padding(LauncherTheme.Metrics.searchHorizontalPadding)
-        .id(refreshToken)
+        .onAppear { permissions.refresh() }
     }
 
     private func permissionRow(
@@ -65,65 +50,84 @@ public struct PermissionsView: View {
         granted: Bool,
         request: @escaping () -> Void
     ) -> some View {
-        HStack(spacing: LauncherTheme.Metrics.rowIconTitleSpacing) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
-                .foregroundStyle(granted ? Color.green : LauncherTheme.Palette.accent)
-                .frame(
-                    width: LauncherTheme.Metrics.rowIconSize,
-                    height: LauncherTheme.Metrics.rowIconSize
-                )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(LauncherTheme.Typography.rowTitle)
-                    .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+        HStack(spacing: 12) {
+            Image(systemName: granted ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(granted ? Color.green : Color.secondary)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.headline)
+                    Text(granted ? "Granted" : "Not granted")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Text(detail)
-                    .font(LauncherTheme.Typography.rowSubtitle)
-                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
-            if granted {
-                Text("Granted")
-                    .font(LauncherTheme.Typography.footerTitle)
-                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
-            } else {
+            if !granted {
                 Button("Request", action: request)
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(LauncherTheme.Metrics.rowContentPadding)
-        .background(
-            LauncherTheme.Palette.selectedRow(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: LauncherTheme.Metrics.rowCornerRadius)
-        )
-    }
-
-    private func refresh() {
-        refreshToken = UUID()
+        .padding(.vertical, 5)
     }
 }
 
 public struct OnboardingPermissionsView: View {
-    private let windowAdjuster: WindowAdjuster
-    private let hyperKeyManager: HyperKeyManager
-    private let snippetExpander: SnippetExpander?
+    private let onContinue: () -> Void
 
-    @MainActor
-    public init(
-        windowAdjuster: WindowAdjuster,
-        hyperKeyManager: HyperKeyManager,
-        snippetExpander: SnippetExpander? = nil
-    ) {
-        self.windowAdjuster = windowAdjuster
-        self.hyperKeyManager = hyperKeyManager
-        self.snippetExpander = snippetExpander
+    public init(onContinue: @escaping () -> Void) {
+        self.onContinue = onContinue
     }
 
     public var body: some View {
-        PermissionsView(
-            windowAdjuster: windowAdjuster,
-            hyperKeyManager: hyperKeyManager,
-            snippetExpander: snippetExpander
-        )
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Welcome to Omnicast")
+                    .font(.title2.weight(.semibold))
+                Text("Permissions stay optional until you turn on a feature that needs them.")
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                featureLine(icon: "macwindow", text: "Window commands use Accessibility.")
+                featureLine(
+                    icon: "text.quote",
+                    text: "Snippet expansion uses Accessibility and Input Monitoring."
+                )
+                featureLine(icon: "capslock", text: "The Hyper key uses Input Monitoring.")
+                featureLine(
+                    icon: "checkmark.circle",
+                    text: "Everything else works without these permissions."
+                )
+            }
+
+            Spacer()
+
+            HStack {
+                Text("Press Esc or choose Continue")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Continue", action: onContinue)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func featureLine(icon: String, text: String) -> some View {
+        Label {
+            Text(text)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 20)
+        }
     }
 }

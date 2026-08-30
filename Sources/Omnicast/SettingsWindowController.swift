@@ -11,11 +11,11 @@ final class SettingsWindowController: NSWindowController {
     init(
         store: SettingsStore,
         snippetStore: SnippetStore,
-        snippetExpander: SnippetExpander,
         quicklinkStore: QuicklinkStore,
         aiKeyStore: AIKeyStore,
-        windowAdjuster: WindowAdjuster,
-        hyperKeyManager: HyperKeyManager,
+        permissions: PermissionsService,
+        snippetEnableController: PermissionFeatureController,
+        hyperKeyEnableController: PermissionFeatureController,
         extensionRegistry: ExtensionRegistry,
         extensionStoreClient: RaycastStoreClient,
         onRegistryChanged: @escaping () -> Void
@@ -28,11 +28,11 @@ final class SettingsWindowController: NSWindowController {
         let view = SettingsTabsView(
             store: store,
             snippetStore: snippetStore,
-            snippetExpander: snippetExpander,
             quicklinkStore: quicklinkStore,
             aiKeyStore: aiKeyStore,
-            windowAdjuster: windowAdjuster,
-            hyperKeyManager: hyperKeyManager,
+            permissions: permissions,
+            snippetEnableController: snippetEnableController,
+            hyperKeyEnableController: hyperKeyEnableController,
             extensionsView: AnyView(extensions)
         )
         let window = NSWindow(

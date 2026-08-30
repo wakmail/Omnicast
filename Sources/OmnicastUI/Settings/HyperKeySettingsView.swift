@@ -5,14 +5,17 @@ import SwiftUI
 
 public struct HyperKeySettingsView: View {
     @ObservedObject private var store: SettingsStore
-    private let manager: HyperKeyManager
+    @ObservedObject private var enableController: PermissionFeatureController
     @State private var errorMessage: String?
     @Environment(\.colorScheme) private var colorScheme
 
     @MainActor
-    public init(store: SettingsStore, manager: HyperKeyManager) {
+    public init(
+        store: SettingsStore,
+        enableController: PermissionFeatureController
+    ) {
         self.store = store
-        self.manager = manager
+        self.enableController = enableController
     }
 
     public var body: some View {
@@ -23,16 +26,22 @@ public struct HyperKeySettingsView: View {
 
             Toggle("Enable Hyper Key", isOn: enabledBinding)
 
+            if enableController.isWaiting {
+                Text(PermissionFeature.hyperKey.waitingMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Picker("Tap action", selection: modeBinding) {
                 Text("Do Nothing").tag(HyperKeyMode.nothing)
                 Text("Escape").tag(HyperKeyMode.escape)
                 Text("Toggle Caps Lock").tag(HyperKeyMode.toggle)
             }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(LauncherTheme.Typography.footerTitle)
-                    .foregroundStyle(.red)
+            if let message = errorMessage ?? enableController.errorMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -41,24 +50,22 @@ public struct HyperKeySettingsView: View {
 
     private var enabledBinding: Binding<Bool> {
         Binding(
-            get: { store.settings.hyperKey.enabled },
-            set: { enabled in update { $0.enabled = enabled } }
+            get: { enableController.isEnabled },
+            set: enableController.setEnabled
         )
     }
 
     private var modeBinding: Binding<HyperKeyMode> {
         Binding(
             get: { store.settings.hyperKey.mode },
-            set: { mode in update { $0.mode = mode } }
+            set: { mode in
+                do {
+                    try store.update { $0.hyperKey.mode = mode }
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
         )
-    }
-
-    private func update(_ change: (inout HyperKeySettings) -> Void) {
-        do {
-            try store.update { change(&$0.hyperKey) }
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 }

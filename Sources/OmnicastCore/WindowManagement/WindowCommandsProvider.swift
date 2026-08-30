@@ -4,14 +4,23 @@ import Foundation
 
 public struct WindowCommandsProvider: CommandProvider {
     private let adjuster: WindowAdjuster
+    private let requestAccessibility: (@MainActor @Sendable () -> Void)?
 
-    public init(adjuster: WindowAdjuster = WindowAdjuster()) {
+    public init(
+        adjuster: WindowAdjuster = WindowAdjuster(),
+        requestAccessibility: (@MainActor @Sendable () -> Void)? = nil
+    ) {
         self.adjuster = adjuster
+        self.requestAccessibility = requestAccessibility
     }
 
     public func commands() async -> [any Command] {
         WindowPlacement.allCases.map {
-            WindowPlacementCommand(placement: $0, adjuster: adjuster)
+            WindowPlacementCommand(
+                placement: $0,
+                adjuster: adjuster,
+                requestAccessibility: requestAccessibility
+            )
         }
     }
 }
@@ -19,6 +28,7 @@ public struct WindowCommandsProvider: CommandProvider {
 public struct WindowPlacementCommand: Command {
     public let placement: WindowPlacement
     private let adjuster: WindowAdjuster
+    private let requestAccessibility: (@MainActor @Sendable () -> Void)?
 
     public var id: String { "system-window-management-\(placement.rawValue)" }
     public var title: String { "Window: \(placement.displayName)" }
@@ -27,13 +37,25 @@ public struct WindowPlacementCommand: Command {
     public var keywords: [String] { placement.keywords }
     public let kind: CommandKind = .window
 
-    public init(placement: WindowPlacement, adjuster: WindowAdjuster = WindowAdjuster()) {
+    public init(
+        placement: WindowPlacement,
+        adjuster: WindowAdjuster = WindowAdjuster(),
+        requestAccessibility: (@MainActor @Sendable () -> Void)? = nil
+    ) {
         self.placement = placement
         self.adjuster = adjuster
+        self.requestAccessibility = requestAccessibility
     }
 
     @MainActor
     public func execute(context: CommandContext) async throws {
+        guard adjuster.accessibilityGranted else {
+            if let requestAccessibility {
+                requestAccessibility()
+                return
+            }
+            throw WindowAdjustmentError.accessibilityPermissionRequired
+        }
         try adjuster.apply(placement)
         context.toasts.show("\(placement.displayName) applied")
     }

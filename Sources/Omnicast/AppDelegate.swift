@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snippetWindow: NSWindow?
     private var aiWindow: NSWindow?
     private var settingsStore: SettingsStore?
+    private var permissions: PermissionsService?
+    private var snippetEnableController: PermissionFeatureController?
+    private var hyperKeyEnableController: PermissionFeatureController?
     private var registry: CommandRegistry?
     private var commandContext: CommandContext?
 
@@ -64,9 +67,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let aiChatStore = try AIChatStore()
             let extensionStoreClient = RaycastStoreClient()
             let extensionRegistry = ExtensionRegistry(store: extensionStoreClient)
+            let permissions = PermissionsService()
+            if settingsStore.settings.hyperKey.enabled && !permissions.inputMonitoring {
+                try settingsStore.update { $0.hyperKey.enabled = false }
+            }
+            if settingsStore.settings.snippetsEnabled
+                && !(permissions.accessibility && permissions.inputMonitoring) {
+                try settingsStore.update { $0.snippetsEnabled = false }
+            }
             let hyperKeyManager = HyperKeyManager(settings: settingsStore.settings.hyperKey)
+            let snippetEnableController = PermissionFeatureController(
+                feature: .snippets,
+                enabled: settingsStore.settings.snippetsEnabled,
+                permissions: permissions
+            ) { [unowned settingsStore] enabled in
+                try settingsStore.update { $0.snippetsEnabled = enabled }
+            }
+            let hyperKeyEnableController = PermissionFeatureController(
+                feature: .hyperKey,
+                enabled: settingsStore.settings.hyperKey.enabled,
+                permissions: permissions
+            ) { [unowned settingsStore] enabled in
+                try settingsStore.update { $0.hyperKey.enabled = enabled }
+            }
+
+            permissions.onRequest = { [weak permissions] kind in
+                guard let permissions else { return }
+                PermissionGuideOverlay.shared.show(for: kind, permissions: permissions)
+            }
 
             self.settingsStore = settingsStore
+            self.permissions = permissions
+            self.snippetEnableController = snippetEnableController
+            self.hyperKeyEnableController = hyperKeyEnableController
             self.clipboardStore = clipboardStore
             self.clipboardMonitor = clipboardMonitor
             self.pasteService = pasteService
@@ -106,7 +139,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SnippetCommandsProvider(store: snippetStore) { [weak self] in
                     self?.showSnippetManager()
                 },
-                WindowCommandsProvider(adjuster: windowAdjuster),
+                WindowCommandsProvider(
+                    adjuster: windowAdjuster,
+                    requestAccessibility: { permissions.requestAccessibility() }
+                ),
                 AICommandsProvider { [weak self] destination in
                     self?.showAIChat(destination)
                 },
@@ -157,10 +193,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.hotkeyManager = hotkeyManager
             appliedHotkeySettings = settingsStore.settings.hotkey
 
-            if settingsStore.settings.hyperKey.enabled {
+            if settingsStore.settings.hyperKey.enabled && permissions.inputMonitoring {
                 try? hyperKeyManager.enable()
             }
-            if snippetExpander.isAvailable {
+            if settingsStore.settings.snippetsEnabled
+                && permissions.accessibility
+                && permissions.inputMonitoring {
                 _ = snippetExpander.start()
             }
             clipboardMonitor.start()
@@ -177,17 +215,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             observeOpenNotification()
 
             if !settingsStore.settings.hasShownOnboarding {
+                PermissionGuideOverlay.suppressed = true
                 navigationCoordinator.push(LauncherPresentedView(
                     title: "Welcome to Omnicast",
                     content: AnyView(OnboardingPermissionsView(
-                        windowAdjuster: windowAdjuster,
-                        hyperKeyManager: hyperKeyManager,
-                        snippetExpander: snippetExpander
+                        onContinue: { [weak self] in
+                            self?.navigationCoordinator.pop()
+                        }
                     )),
                     showsSearchField: false,
-                    initialQuery: ""
+                    initialQuery: "",
+                    onDismiss: { [weak self] in self?.finishOnboarding() }
                 ))
-                try settingsStore.update { $0.hasShownOnboarding = true }
                 showLauncher()
             }
         } catch {
@@ -196,7 +235,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        if snippetExpander?.isAvailable == true {
+        permissions?.refresh()
+        if settingsStore?.settings.snippetsEnabled == true,
+           snippetExpander?.isAvailable == true {
             _ = snippetExpander?.start()
         }
         if hyperKeyManager?.settings.enabled == true,
@@ -303,6 +344,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.aiConfiguration != AIConfiguration(settings: settings) {
                     self.configureAI(settings: settings)
                 }
+                if settings.snippetsEnabled {
+                    _ = self.snippetExpander?.start()
+                } else {
+                    self.snippetExpander?.stop()
+                }
             }
             .store(in: &subscriptions)
 
@@ -349,15 +395,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel?.showNearTop(position: settingsStore?.settings.launcherPosition)
     }
 
+    private func finishOnboarding() {
+        PermissionGuideOverlay.suppressed = false
+        guard let settingsStore, !settingsStore.settings.hasShownOnboarding else { return }
+        do {
+            try settingsStore.update { $0.hasShownOnboarding = true }
+        } catch {
+            toastCenter.show(error.localizedDescription)
+        }
+    }
+
     private func showSettings() {
         panel?.hide(returningFocus: false)
         guard
             let settingsStore,
             let snippetStore,
-            let snippetExpander,
             let quicklinkStore,
             let aiKeyStore,
-            let hyperKeyManager,
+            let permissions,
+            let snippetEnableController,
+            let hyperKeyEnableController,
             let extensionRegistry,
             let extensionStoreClient
         else { return }
@@ -365,11 +422,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindowController = SettingsWindowController(
                 store: settingsStore,
                 snippetStore: snippetStore,
-                snippetExpander: snippetExpander,
                 quicklinkStore: quicklinkStore,
                 aiKeyStore: aiKeyStore,
-                windowAdjuster: windowAdjuster,
-                hyperKeyManager: hyperKeyManager,
+                permissions: permissions,
+                snippetEnableController: snippetEnableController,
+                hyperKeyEnableController: hyperKeyEnableController,
                 extensionRegistry: extensionRegistry,
                 extensionStoreClient: extensionStoreClient,
                 onRegistryChanged: { [weak self] in self?.refreshCommands() }
@@ -530,28 +587,5 @@ private struct AIConfiguration: Equatable {
         model = settings.defaultAIModel
         compatibleEnabled = settings.openAICompatibleEnabled
         compatibleBaseURL = settings.openAICompatibleBaseURL
-    }
-}
-
-private struct ResetWindowPositionProvider: CommandProvider {
-    let reset: @MainActor @Sendable () -> Void
-
-    func commands() async -> [any Command] {
-        [ResetWindowPositionCommand(reset: reset)]
-    }
-}
-
-private struct ResetWindowPositionCommand: Command {
-    let reset: @MainActor @Sendable () -> Void
-    let id = "system:reset-window-position"
-    let title = "Reset Window Position"
-    let subtitle = "Move the launcher to its default position"
-    let icon: CommandIcon = .sfSymbol("rectangle.center.inset.filled")
-    let keywords = ["launcher", "panel", "center", "position"]
-    let kind: CommandKind = .system
-
-    @MainActor
-    func execute(context: CommandContext) async throws {
-        reset()
     }
 }

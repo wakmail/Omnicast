@@ -15,6 +15,7 @@ final class SettingsStoreTests: XCTestCase {
             settings.theme = .dark
             settings.launchAtLogin = true
             settings.hyperKey = HyperKeySettings(mode: .escape, enabled: true)
+            settings.snippetsEnabled = true
             settings.launcherPosition = LauncherWindowPosition(x: 120, y: 340)
             settings.hasShownOnboarding = true
             settings.defaultAIProvider = .anthropic
@@ -44,6 +45,7 @@ final class SettingsStoreTests: XCTestCase {
         let loaded = try SettingsStore(directoryURL: directory)
 
         XCTAssertEqual(loaded.settings.hyperKey, HyperKeySettings())
+        XCTAssertFalse(loaded.settings.snippetsEnabled)
         XCTAssertNil(loaded.settings.launcherPosition)
         XCTAssertFalse(loaded.settings.hasShownOnboarding)
         XCTAssertEqual(loaded.settings.defaultAIProvider, .openAI)

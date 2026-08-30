@@ -6,31 +6,31 @@ import SwiftUI
 public struct SettingsTabsView: View {
     private let store: SettingsStore
     private let snippetStore: SnippetStore
-    private let snippetExpander: SnippetExpander
     private let quicklinkStore: QuicklinkStore
     private let aiKeyStore: AIKeyStore
-    private let windowAdjuster: WindowAdjuster
-    private let hyperKeyManager: HyperKeyManager
+    private let permissions: PermissionsService
+    private let snippetEnableController: PermissionFeatureController
+    private let hyperKeyEnableController: PermissionFeatureController
     private let extensionsView: AnyView
 
     @MainActor
     public init(
         store: SettingsStore,
         snippetStore: SnippetStore,
-        snippetExpander: SnippetExpander,
         quicklinkStore: QuicklinkStore,
         aiKeyStore: AIKeyStore,
-        windowAdjuster: WindowAdjuster,
-        hyperKeyManager: HyperKeyManager,
+        permissions: PermissionsService,
+        snippetEnableController: PermissionFeatureController,
+        hyperKeyEnableController: PermissionFeatureController,
         extensionsView: AnyView
     ) {
         self.store = store
         self.snippetStore = snippetStore
-        self.snippetExpander = snippetExpander
         self.quicklinkStore = quicklinkStore
         self.aiKeyStore = aiKeyStore
-        self.windowAdjuster = windowAdjuster
-        self.hyperKeyManager = hyperKeyManager
+        self.permissions = permissions
+        self.snippetEnableController = snippetEnableController
+        self.hyperKeyEnableController = hyperKeyEnableController
         self.extensionsView = extensionsView
     }
 
@@ -38,18 +38,24 @@ public struct SettingsTabsView: View {
         TabView {
             SettingsView(
                 store: store,
-                onHotkeyChange: { _ in },
-                windowAdjuster: windowAdjuster,
-                hyperKeyManager: hyperKeyManager,
-                snippetExpander: snippetExpander
+                onHotkeyChange: { _ in }
             )
             .tabItem { Label("General", systemImage: "gear") }
 
-            HyperKeySettingsView(store: store, manager: hyperKeyManager)
+            HyperKeySettingsView(
+                store: store,
+                enableController: hyperKeyEnableController
+            )
                 .tabItem { Label("Hyper Key", systemImage: "capslock") }
 
-            SnippetManagerView(store: snippetStore)
+            SnippetSettingsView(
+                snippetStore: snippetStore,
+                enableController: snippetEnableController
+            )
                 .tabItem { Label("Snippets", systemImage: "text.quote") }
+
+            PermissionsView(permissions: permissions)
+                .tabItem { Label("Permissions", systemImage: "hand.raised") }
 
             QuicklinkManagerView(store: quicklinkStore)
                 .tabItem { Label("Quick Links", systemImage: "link") }
