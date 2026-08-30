@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import OmnicastCore
 import OmnicastUI
 
 @MainActor
 final class LauncherPanel: NSPanel {
     let keyEvents: LauncherKeyEvents
+    var onPositionChanged: ((LauncherWindowPosition) -> Void)?
     private var previousApplication: NSRunningApplication?
+    private var positioningProgrammatically = false
+    private var positionSaveWorkItem: DispatchWorkItem?
 
     init(keyEvents: LauncherKeyEvents) {
         self.keyEvents = keyEvents
@@ -30,29 +34,48 @@ final class LauncherPanel: NSPanel {
         isFloatingPanel = true
         hidesOnDeactivate = false
         animationBehavior = .utilityWindow
+        isMovableByWindowBackground = true
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    func showNearTop() {
+    func showNearTop(position: LauncherWindowPosition?) {
         let currentPID = ProcessInfo.processInfo.processIdentifier
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.processIdentifier != currentPID {
             previousApplication = frontmost
         }
 
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
-            let visible = screen.visibleFrame
-            let origin = NSPoint(
-                x: visible.midX - frame.width / 2,
-                y: visible.maxY - frame.height - min(90, visible.height * 0.12)
-            )
-            setFrameOrigin(origin)
+        positioningProgrammatically = true
+        if let position, isPositionVisible(position) {
+            setFrameOrigin(NSPoint(x: position.x, y: position.y))
+        } else {
+            setDefaultPosition()
         }
+        positioningProgrammatically = false
 
         makeKeyAndOrderFront(nil)
         orderFrontRegardless()
+    }
+
+    func resetPosition() {
+        positioningProgrammatically = true
+        setDefaultPosition()
+        positioningProgrammatically = false
+    }
+
+    override func setFrameOrigin(_ point: NSPoint) {
+        super.setFrameOrigin(point)
+        if isVisible, !positioningProgrammatically {
+            positionSaveWorkItem?.cancel()
+            let position = LauncherWindowPosition(x: Double(point.x), y: Double(point.y))
+            let work = DispatchWorkItem { [weak self] in
+                self?.onPositionChanged?(position)
+            }
+            positionSaveWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
     }
 
     func hide(returningFocus: Bool) {
@@ -86,6 +109,10 @@ final class LauncherPanel: NSPanel {
             keyEvents.send(.settings)
             return
         }
+        if modifiers.contains(.command), (event.keyCode == 36 || event.keyCode == 76) {
+            keyEvents.send(.commandEnter)
+            return
+        }
 
         switch event.keyCode {
         case 126:
@@ -99,5 +126,24 @@ final class LauncherPanel: NSPanel {
         default:
             super.sendEvent(event)
         }
+    }
+
+    private func setDefaultPosition() {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let visible = screen.visibleFrame
+        setFrameOrigin(NSPoint(
+            x: visible.midX - frame.width / 2,
+            y: visible.maxY - frame.height - min(90, visible.height * 0.12)
+        ))
+    }
+
+    private func isPositionVisible(_ position: LauncherWindowPosition) -> Bool {
+        let proposed = NSRect(
+            x: position.x,
+            y: position.y,
+            width: frame.width,
+            height: frame.height
+        )
+        return NSScreen.screens.contains { $0.visibleFrame.intersects(proposed) }
     }
 }

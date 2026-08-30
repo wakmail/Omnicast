@@ -5,6 +5,7 @@ import SwiftUI
 
 struct LauncherSearchField: NSViewRepresentable {
     @Binding var text: String
+    let placeholder: String
     @Environment(\.colorScheme) private var colorScheme
 
     func makeCoordinator() -> Coordinator {
@@ -32,7 +33,7 @@ struct LauncherSearchField: NSViewRepresentable {
         }
         field.textColor = LauncherTheme.Palette.primaryNSColor(for: colorScheme)
         field.placeholderAttributedString = NSAttributedString(
-            string: "Search for apps and commands",
+            string: placeholder,
             attributes: [
                 .font: LauncherTheme.Typography.searchNSFont,
                 .foregroundColor: LauncherTheme.Palette.secondaryNSColor(for: colorScheme)

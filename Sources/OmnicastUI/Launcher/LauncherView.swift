@@ -15,6 +15,9 @@ public struct LauncherView: View {
         frecencyStore: FrecencyStore,
         keyEvents: LauncherKeyEvents,
         toasts: ToastCenter,
+        webSearchBangs: WebSearchBangs = WebSearchBangs(),
+        presentingCommands: [String: LauncherCommandPresenter] = [:],
+        navigationCoordinator: LauncherNavigationCoordinator? = nil,
         onHide: @escaping (Bool) -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
@@ -23,6 +26,9 @@ public struct LauncherView: View {
             context: context,
             frecencyStore: frecencyStore,
             keyEvents: keyEvents,
+            webSearchBangs: webSearchBangs,
+            presentingCommands: presentingCommands,
+            navigationCoordinator: navigationCoordinator ?? LauncherNavigationCoordinator(),
             onHide: onHide,
             onOpenSettings: onOpenSettings
         ))
@@ -35,13 +41,16 @@ public struct LauncherView: View {
             LauncherTheme.Palette.surface(for: colorScheme)
 
             VStack(spacing: 0) {
-                LauncherSearchField(text: $model.query)
-                    .frame(height: LauncherTheme.Metrics.searchHeight)
-                    .padding(.horizontal, LauncherTheme.Metrics.searchHorizontalPadding)
+                launcherHeader
 
                 divider
 
-                resultList
+                if let presentedView = model.presentedView {
+                    presentedView.content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    resultList
+                }
 
                 divider
 
@@ -76,6 +85,27 @@ public struct LauncherView: View {
                 LauncherTheme.Palette.borderPrimary(for: colorScheme),
                 lineWidth: LauncherTheme.Metrics.borderWidth
             )
+        }
+    }
+
+    @ViewBuilder
+    private var launcherHeader: some View {
+        if model.presentedView?.showsSearchField == false {
+            HStack {
+                Text(model.presentedView?.title ?? "Omnicast")
+                    .font(LauncherTheme.Typography.search)
+                    .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+                Spacer()
+            }
+            .frame(height: LauncherTheme.Metrics.searchHeight)
+            .padding(.horizontal, LauncherTheme.Metrics.searchHorizontalPadding)
+        } else {
+            LauncherSearchField(
+                text: $model.query,
+                placeholder: model.searchPlaceholder
+            )
+            .frame(height: LauncherTheme.Metrics.searchHeight)
+            .padding(.horizontal, LauncherTheme.Metrics.searchHorizontalPadding)
         }
     }
 
@@ -129,7 +159,21 @@ public struct LauncherView: View {
 
     private var footer: some View {
         HStack(spacing: LauncherTheme.Metrics.footerIconTitleSpacing) {
-            if let command = model.selectedCommand {
+            if !model.isAtRoot {
+                Text(model.presentedView?.title ?? "Feature")
+                    .font(LauncherTheme.Typography.footerTitle)
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                    .lineLimit(1)
+            } else if case .confirmation(let title) = model.inputMode {
+                Text("Confirm \(title)")
+                    .font(LauncherTheme.Typography.footerTitle)
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                    .lineLimit(1)
+            } else if case .argument(_, let progress) = model.inputMode {
+                Text(progress)
+                    .font(LauncherTheme.Typography.footerTitle)
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+            } else if let command = model.selectedCommand {
                 CommandIconView(icon: command.icon)
                     .frame(
                         width: LauncherTheme.Metrics.footerIconSize,
@@ -149,34 +193,53 @@ public struct LauncherView: View {
             Spacer()
 
             HStack(spacing: LauncherTheme.Metrics.footerGroupSpacing) {
-                HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
-                    Text("Open")
-                        .font(LauncherTheme.Typography.footerAction)
-                        .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
-                    KeyCap("Enter")
-                }
-
-                Button {
-                    model.actionPanelVisible.toggle()
-                } label: {
+                if !model.isAtRoot {
                     HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
-                        Text("Actions")
-                            .font(LauncherTheme.Typography.footerTitle)
-                            .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
-                        HStack(spacing: LauncherTheme.Metrics.keyCapSpacing) {
-                            KeyCap("⌘")
-                            KeyCap("K")
+                        Text("Back")
+                            .font(LauncherTheme.Typography.footerAction)
+                            .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+                        KeyCap("Esc")
+                    }
+                } else if case .confirmation = model.inputMode {
+                    footerHint("Confirm", key: "Enter")
+                    footerHint("Cancel", key: "Esc")
+                } else if case .argument = model.inputMode {
+                    footerHint("Continue", key: "Enter")
+                    footerHint("Cancel", key: "Esc")
+                } else {
+                    footerHint("Open", key: "Enter")
+
+                    Button {
+                        model.actionPanelVisible.toggle()
+                    } label: {
+                        HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
+                            Text("Actions")
+                                .font(LauncherTheme.Typography.footerTitle)
+                                .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                            HStack(spacing: LauncherTheme.Metrics.keyCapSpacing) {
+                                KeyCap("⌘")
+                                KeyCap("K")
+                            }
                         }
                     }
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $model.actionPanelVisible, arrowEdge: .bottom) {
-                    actionPanel
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $model.actionPanelVisible, arrowEdge: .bottom) {
+                        actionPanel
+                    }
                 }
             }
         }
         .padding(.horizontal, LauncherTheme.Metrics.footerHorizontalPadding)
         .frame(height: LauncherTheme.Metrics.footerHeight)
+    }
+
+    private func footerHint(_ title: String, key: String) -> some View {
+        HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
+            Text(title)
+                .font(LauncherTheme.Typography.footerAction)
+                .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
+            KeyCap(key)
+        }
     }
 
     private var actionPanel: some View {

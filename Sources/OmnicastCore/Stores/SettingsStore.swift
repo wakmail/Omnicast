@@ -46,15 +46,88 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var hotkey: HotkeySettings
     public var theme: AppTheme
     public var launchAtLogin: Bool
+    public var hyperKey: HyperKeySettings
+    public var launcherPosition: LauncherWindowPosition?
+    public var hasShownOnboarding: Bool
+    public var defaultAIProvider: AIProviderIdentifier
+    public var defaultAIModel: String
+    public var openAICompatibleEnabled: Bool
+    public var openAICompatibleBaseURL: String
 
     public init(
         hotkey: HotkeySettings = .optionSpace,
         theme: AppTheme = .system,
-        launchAtLogin: Bool = false
+        launchAtLogin: Bool = false,
+        hyperKey: HyperKeySettings = HyperKeySettings(),
+        launcherPosition: LauncherWindowPosition? = nil,
+        hasShownOnboarding: Bool = false,
+        defaultAIProvider: AIProviderIdentifier = .openAI,
+        defaultAIModel: String = "gpt-4o-mini",
+        openAICompatibleEnabled: Bool = false,
+        openAICompatibleBaseURL: String = ""
     ) {
         self.hotkey = hotkey
         self.theme = theme
         self.launchAtLogin = launchAtLogin
+        self.hyperKey = hyperKey
+        self.launcherPosition = launcherPosition
+        self.hasShownOnboarding = hasShownOnboarding
+        self.defaultAIProvider = defaultAIProvider
+        self.defaultAIModel = defaultAIModel
+        self.openAICompatibleEnabled = openAICompatibleEnabled
+        self.openAICompatibleBaseURL = openAICompatibleBaseURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case hotkey
+        case theme
+        case launchAtLogin
+        case hyperKey
+        case launcherPosition
+        case hasShownOnboarding
+        case defaultAIProvider
+        case defaultAIModel
+        case openAICompatibleEnabled
+        case openAICompatibleBaseURL
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        hotkey = try values.decodeIfPresent(HotkeySettings.self, forKey: .hotkey) ?? .optionSpace
+        theme = try values.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .system
+        launchAtLogin = try values.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        hyperKey = try values.decodeIfPresent(HyperKeySettings.self, forKey: .hyperKey)
+            ?? HyperKeySettings()
+        launcherPosition = try values.decodeIfPresent(
+            LauncherWindowPosition.self,
+            forKey: .launcherPosition
+        )
+        hasShownOnboarding = try values.decodeIfPresent(Bool.self, forKey: .hasShownOnboarding)
+            ?? false
+        defaultAIProvider = try values.decodeIfPresent(
+            AIProviderIdentifier.self,
+            forKey: .defaultAIProvider
+        ) ?? .openAI
+        defaultAIModel = try values.decodeIfPresent(String.self, forKey: .defaultAIModel)
+            ?? "gpt-4o-mini"
+        openAICompatibleEnabled = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .openAICompatibleEnabled
+        ) ?? false
+        openAICompatibleBaseURL = try values.decodeIfPresent(
+            String.self,
+            forKey: .openAICompatibleBaseURL
+        ) ?? ""
+    }
+}
+
+public struct LauncherWindowPosition: Codable, Equatable, Sendable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
     }
 }
 

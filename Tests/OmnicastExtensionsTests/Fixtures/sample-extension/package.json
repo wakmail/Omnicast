@@ -1,0 +1,17 @@
+{
+  "name": "sample-extension",
+  "title": "Sample Extension",
+  "description": "Fixture extension for registry tests",
+  "author": "omnicast",
+  "icon": "icon.png",
+  "platforms": ["macOS"],
+  "categories": ["Productivity"],
+  "commands": [
+    {
+      "name": "show",
+      "title": "Show Fixture",
+      "description": "Shows fixture content",
+      "mode": "view"
+    }
+  ]
+}

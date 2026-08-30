@@ -6,11 +6,13 @@ import SwiftUI
 
 public struct ClipboardHistoryView: View {
     @StateObject private var model: ClipboardHistoryViewModel
+    private let showsChrome: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     @MainActor
-    public init(viewModel: ClipboardHistoryViewModel) {
+    public init(viewModel: ClipboardHistoryViewModel, showsChrome: Bool = true) {
         _model = StateObject(wrappedValue: viewModel)
+        self.showsChrome = showsChrome
     }
 
     public var body: some View {
@@ -18,8 +20,10 @@ public struct ClipboardHistoryView: View {
             LauncherTheme.Palette.surface(for: colorScheme)
 
             VStack(spacing: 0) {
-                searchField
-                horizontalDivider
+                if showsChrome {
+                    searchField
+                    horizontalDivider
+                }
                 GeometryReader { proxy in
                     HStack(spacing: 0) {
                         itemList
@@ -28,8 +32,10 @@ public struct ClipboardHistoryView: View {
                         preview
                     }
                 }
-                horizontalDivider
-                footer
+                if showsChrome {
+                    horizontalDivider
+                    footer
+                }
             }
 
             keyboardShortcuts

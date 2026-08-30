@@ -3,10 +3,11 @@
 import Combine
 import Foundation
 
-public enum LauncherKey: Sendable {
+public enum LauncherKey: Equatable, Sendable {
     case moveUp
     case moveDown
     case enter
+    case commandEnter
     case escape
     case actions
     case settings

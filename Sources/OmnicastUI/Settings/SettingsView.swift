@@ -6,14 +6,23 @@ import SwiftUI
 public struct SettingsView: View {
     @ObservedObject private var store: SettingsStore
     private let onHotkeyChange: (HotkeySettings) -> Void
+    private let windowAdjuster: WindowAdjuster?
+    private let hyperKeyManager: HyperKeyManager?
+    private let snippetExpander: SnippetExpander?
     @State private var errorMessage: String?
 
     public init(
         store: SettingsStore,
-        onHotkeyChange: @escaping (HotkeySettings) -> Void
+        onHotkeyChange: @escaping (HotkeySettings) -> Void,
+        windowAdjuster: WindowAdjuster? = nil,
+        hyperKeyManager: HyperKeyManager? = nil,
+        snippetExpander: SnippetExpander? = nil
     ) {
         self.store = store
         self.onHotkeyChange = onHotkeyChange
+        self.windowAdjuster = windowAdjuster
+        self.hyperKeyManager = hyperKeyManager
+        self.snippetExpander = snippetExpander
     }
 
     public var body: some View {
@@ -32,6 +41,16 @@ public struct SettingsView: View {
 
             Toggle("Launch at login", isOn: launchAtLoginBinding)
 
+            if let windowAdjuster, let hyperKeyManager {
+                Section("Permissions") {
+                    PermissionsView(
+                        windowAdjuster: windowAdjuster,
+                        hyperKeyManager: hyperKeyManager,
+                        snippetExpander: snippetExpander
+                    )
+                }
+            }
+
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
@@ -39,8 +58,7 @@ public struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
-        .frame(width: 420, height: 240)
+        .padding(LauncherTheme.Metrics.searchHorizontalPadding)
     }
 
     private var hotkeyBinding: Binding<HotkeySettings> {
