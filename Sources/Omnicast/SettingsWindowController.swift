@@ -20,7 +20,8 @@ final class SettingsWindowController: NSWindowController {
         speechKeyStore: SpeechKeyStore,
         extensionRegistry: ExtensionRegistry,
         extensionStoreClient: RaycastStoreClient,
-        onRegistryChanged: @escaping () -> Void
+        onRegistryChanged: @escaping () -> Void,
+        onHotkeyRecordingChanged: @escaping (Bool) -> Void
     ) {
         let extensions = ExtensionSettingsView(
             registry: extensionRegistry,
@@ -37,7 +38,8 @@ final class SettingsWindowController: NSWindowController {
             snippetEnableController: snippetEnableController,
             hyperKeyEnableController: hyperKeyEnableController,
             dictationEnableController: dictationEnableController,
-            extensionsView: AnyView(extensions)
+            extensionsView: AnyView(extensions),
+            onHotkeyRecordingChanged: onHotkeyRecordingChanged
         )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 620),
