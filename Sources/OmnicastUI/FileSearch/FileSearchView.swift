@@ -108,23 +108,31 @@ public struct FileSearchView: View {
                                 model.openSelected()
                             } label: {
                                 HStack(spacing: LauncherTheme.Metrics.rowIconTitleSpacing) {
-                                    Image(systemName: symbol(for: result.kind))
-                                        .frame(
-                                            width: LauncherTheme.Metrics.rowIconSize,
-                                            height: LauncherTheme.Metrics.rowIconSize
-                                        )
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    if result.kind == .permission {
                                         Text(result.displayName)
                                             .font(LauncherTheme.Typography.rowTitle)
                                             .foregroundStyle(
                                                 LauncherTheme.Palette.primaryText(for: colorScheme)
                                             )
-                                        Text(result.url.deletingLastPathComponent().path)
-                                            .font(LauncherTheme.Typography.rowSubtitle)
-                                            .foregroundStyle(
-                                                LauncherTheme.Palette.secondaryText(for: colorScheme)
+                                    } else {
+                                        Image(systemName: symbol(for: result.kind))
+                                            .frame(
+                                                width: LauncherTheme.Metrics.rowIconSize,
+                                                height: LauncherTheme.Metrics.rowIconSize
                                             )
-                                            .lineLimit(1)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(result.displayName)
+                                                .font(LauncherTheme.Typography.rowTitle)
+                                                .foregroundStyle(
+                                                    LauncherTheme.Palette.primaryText(for: colorScheme)
+                                                )
+                                            Text(result.url.deletingLastPathComponent().path)
+                                                .font(LauncherTheme.Typography.rowSubtitle)
+                                                .foregroundStyle(
+                                                    LauncherTheme.Palette.secondaryText(for: colorScheme)
+                                                )
+                                                .lineLimit(1)
+                                        }
                                     }
                                     Spacer()
                                 }
@@ -165,6 +173,7 @@ public struct FileSearchView: View {
         case .file: "doc"
         case .directory: "folder"
         case .application: "app"
+        case .permission: "lock"
         case .other: "questionmark.square"
         }
     }

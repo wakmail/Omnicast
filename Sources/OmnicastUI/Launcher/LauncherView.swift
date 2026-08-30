@@ -7,6 +7,7 @@ public struct LauncherView: View {
     @StateObject private var model: LauncherViewModel
     @ObservedObject private var toasts: ToastCenter
     @Environment(\.colorScheme) private var colorScheme
+    private let onImportRayconfig: (URL) -> Void
 
     @MainActor
     public init(
@@ -19,6 +20,7 @@ public struct LauncherView: View {
         calculatorProvider: CalculatorProvider = CalculatorProvider(),
         presentingCommands: [String: LauncherCommandPresenter] = [:],
         navigationCoordinator: LauncherNavigationCoordinator? = nil,
+        onImportRayconfig: @escaping (URL) -> Void = { _ in },
         onHide: @escaping (Bool) -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
@@ -35,6 +37,7 @@ public struct LauncherView: View {
             onOpenSettings: onOpenSettings
         ))
         self.toasts = toasts
+        self.onImportRayconfig = onImportRayconfig
     }
 
     public var body: some View {
@@ -87,6 +90,17 @@ public struct LauncherView: View {
                 LauncherTheme.Palette.borderPrimary(for: colorScheme),
                 lineWidth: LauncherTheme.Metrics.borderWidth
             )
+        }
+        .onDrop(of: RayconfigDropReceiver.typeIdentifiers, isTargeted: nil) { providers in
+            guard model.isAtRoot else { return false }
+            return RayconfigDropReceiver.receive(providers) { result in
+                switch result {
+                case .success(let url):
+                    onImportRayconfig(url)
+                case .failure(let error):
+                    toasts.show(error.localizedDescription)
+                }
+            }
         }
     }
 

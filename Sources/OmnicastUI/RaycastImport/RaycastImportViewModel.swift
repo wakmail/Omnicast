@@ -18,9 +18,14 @@ public final class RaycastImportViewModel: ObservableObject {
     private let reader: RayconfigReader
     private let importer: RaycastImporter
 
-    public init(reader: RayconfigReader = RayconfigReader(), importer: RaycastImporter) {
+    public init(
+        reader: RayconfigReader = RayconfigReader(),
+        importer: RaycastImporter,
+        fileURL: URL? = nil
+    ) {
         self.reader = reader
         self.importer = importer
+        self.fileURL = fileURL
     }
 
     public func chooseFile() {
@@ -33,8 +38,33 @@ public final class RaycastImportViewModel: ObservableObject {
             UTType(filenameExtension: "rayconfig") ?? .data,
             .json
         ]
+        panel.directoryURL = FileManager.default.urls(
+            for: .downloadsDirectory,
+            in: .userDomainMask
+        ).first
         guard panel.runModal() == .OK else { return }
-        fileURL = panel.url
+        guard let url = panel.url else { return }
+        selectFile(url)
+    }
+
+    public func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
+        RayconfigDropReceiver.receive(providers) { [weak self] result in
+            switch result {
+            case .success(let url):
+                self?.selectFile(url)
+            case .failure(let error):
+                self?.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    public func selectFile(_ url: URL) {
+        do {
+            fileURL = try RayconfigDropValidator.validate([url])
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         result = nil
         errorMessage = nil
     }
@@ -69,5 +99,42 @@ public final class RaycastImportViewModel: ObservableObject {
             }
             isImporting = false
         }
+    }
+}
+
+@MainActor
+enum RayconfigDropReceiver {
+    static let typeIdentifiers = [UTType.fileURL.identifier]
+
+    static func receive(
+        _ providers: [NSItemProvider],
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) -> Bool {
+        guard providers.count == 1, let provider = providers.first else {
+            completion(.failure(RayconfigDropValidationError.invalidFileCount))
+            return false
+        }
+        guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
+            completion(.failure(RayconfigDropValidationError.unsupportedExtension))
+            return false
+        }
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+            Task { @MainActor in
+                if let error {
+                    completion(.failure(error))
+                    return
+                }
+                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else {
+                    completion(.failure(RayconfigDropValidationError.unsupportedExtension))
+                    return
+                }
+                do {
+                    completion(.success(try RayconfigDropValidator.validate([url])))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+        }
+        return true
     }
 }

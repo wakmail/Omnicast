@@ -8,6 +8,7 @@ public struct FileSearchResult: Identifiable, Equatable, Sendable {
         case file
         case directory
         case application
+        case permission
         case other
     }
 
@@ -16,7 +17,7 @@ public struct FileSearchResult: Identifiable, Equatable, Sendable {
     public let kind: Kind
     public let modifiedDate: Date?
 
-    public var id: URL { url }
+    public var id: String { "\(url.absoluteString)|\(displayName)" }
 
     public init(
         url: URL,
@@ -31,6 +32,26 @@ public struct FileSearchResult: Identifiable, Equatable, Sendable {
     }
 }
 
+public protocol FileSearchFileManaging {
+    func contentsOfDirectory(
+        at url: URL,
+        includingPropertiesForKeys keys: [URLResourceKey]?,
+        options mask: FileManager.DirectoryEnumerationOptions
+    ) throws -> [URL]
+}
+
+extension FileManager: FileSearchFileManaging {}
+
+public struct FileSearchScanResult: Sendable {
+    public let results: [FileSearchResult]
+    public let deniedRoots: [URL]
+
+    public init(results: [FileSearchResult], deniedRoots: [URL]) {
+        self.results = results
+        self.deniedRoots = deniedRoots
+    }
+}
+
 @MainActor
 public final class FileSearchIndex: ObservableObject {
     @Published public private(set) var results: [FileSearchResult] = []
@@ -39,15 +60,20 @@ public final class FileSearchIndex: ObservableObject {
     public private(set) var protectedRoots: [URL]
     public let debounceNanoseconds: UInt64
 
+    private let fileManager: any FileSearchFileManaging
     private var pendingSearch: Task<Void, Never>?
     private var spotlightSession: SpotlightSearchSession?
 
     public init(
-        protectedRoots: [URL] = [],
-        debounceNanoseconds: UInt64 = 250_000_000
+        protectedRoots: [URL]? = nil,
+        debounceNanoseconds: UInt64 = 250_000_000,
+        fileManager: any FileSearchFileManaging = FileManager.default
     ) {
-        self.protectedRoots = Self.uniqueStandardizedURLs(protectedRoots)
+        self.protectedRoots = Self.uniqueStandardizedURLs(
+            protectedRoots ?? Self.defaultProtectedRoots()
+        )
         self.debounceNanoseconds = debounceNanoseconds
+        self.fileManager = fileManager
     }
 
     public func setProtectedRoots(_ roots: [URL]) {
@@ -88,10 +114,18 @@ public final class FileSearchIndex: ObservableObject {
         async let walked = Self.walk(
             roots: protectedRoots,
             matching: normalized,
-            limit: limit * 4
+            limit: limit * 4,
+            fileManager: fileManager
         )
-        let combined = await spotlight + walked
-        return Self.mergeAndRank(combined, query: normalized, limit: limit)
+        let (spotlightValues, scan) = await (spotlight, walked)
+        let permissionResults = scan.deniedRoots.map(Self.permissionResult)
+        let resultLimit = max(0, limit - permissionResults.count)
+        let matches = Self.mergeAndRank(
+            spotlightValues + scan.results,
+            query: normalized,
+            limit: resultLimit
+        )
+        return Array((permissionResults + matches).prefix(limit))
     }
 
     public nonisolated static func shouldExclude(
@@ -137,7 +171,21 @@ public final class FileSearchIndex: ObservableObject {
         matching query: String,
         limit: Int = 80
     ) async -> [FileSearchResult] {
-        await walk(roots: roots, matching: query, limit: limit)
+        await fallbackScan(roots: roots, matching: query, limit: limit).results
+    }
+
+    public nonisolated static func fallbackScan(
+        roots: [URL],
+        matching query: String,
+        limit: Int = 80,
+        fileManager: any FileSearchFileManaging = FileManager.default
+    ) async -> FileSearchScanResult {
+        await walk(
+            roots: roots,
+            matching: query,
+            limit: limit,
+            fileManager: fileManager
+        )
     }
 
     private func spotlightResults(query: String, limit: Int) async -> [FileSearchResult] {
@@ -159,65 +207,100 @@ public final class FileSearchIndex: ObservableObject {
     private nonisolated static func walk(
         roots: [URL],
         matching query: String,
-        limit: Int
-    ) async -> [FileSearchResult] {
+        limit: Int,
+        fileManager: any FileSearchFileManaging
+    ) async -> FileSearchScanResult {
         await Task.detached(priority: .userInitiated) {
-            walkSynchronously(roots: roots, matching: query, limit: limit)
+            walkSynchronously(
+                roots: roots,
+                matching: query,
+                limit: limit,
+                fileManager: fileManager
+            )
         }.value
     }
 
     private nonisolated static func walkSynchronously(
         roots: [URL],
         matching query: String,
-        limit: Int
-    ) -> [FileSearchResult] {
-        let manager = FileManager.default
+        limit: Int,
+        fileManager: any FileSearchFileManaging
+    ) -> FileSearchScanResult {
         let keys: [URLResourceKey] = [
             .isDirectoryKey,
             .isApplicationKey,
+            .isPackageKey,
+            .isSymbolicLinkKey,
             .contentModificationDateKey,
             .nameKey
         ]
         let terms = normalizedTerms(query)
         var found: [FileSearchResult] = []
         var seen = Set<URL>()
+        var deniedRoots: [URL] = []
+        var rootContents: [[URL]] = []
 
         for root in uniqueStandardizedURLs(roots) {
-            guard let enumerator = manager.enumerator(
-                at: root,
-                includingPropertiesForKeys: keys,
-                options: [.skipsHiddenFiles, .skipsPackageDescendants],
-                errorHandler: { _, _ in true }
-            ) else {
-                continue
+            do {
+                rootContents.append(try fileManager.contentsOfDirectory(
+                    at: root,
+                    includingPropertiesForKeys: keys,
+                    options: [.skipsHiddenFiles]
+                ))
+            } catch {
+                rootContents.append([])
+                if isAccessDenied(error) {
+                    deniedRoots.append(root)
+                }
             }
+        }
+        guard limit > 0 else {
+            return FileSearchScanResult(results: [], deniedRoots: deniedRoots)
+        }
 
-            for case let candidate as URL in enumerator {
+        for contents in rootContents {
+            var pending = contents
+            while let candidate = pending.popLast() {
                 if shouldExclude(candidate) {
-                    enumerator.skipDescendants()
                     continue
                 }
                 let canonical = candidate.standardizedFileURL
                 guard seen.insert(canonical).inserted else { continue }
-                guard matches(canonical, terms: terms) else { continue }
-                if let result = makeResult(url: canonical) {
+                let values = try? canonical.resourceValues(forKeys: Set(keys))
+                if found.count < limit,
+                   matches(canonical, terms: terms),
+                   let result = makeResult(url: canonical, values: values) {
                     found.append(result)
+                    if found.count >= limit {
+                        return FileSearchScanResult(results: found, deniedRoots: deniedRoots)
+                    }
                 }
-                if found.count >= limit {
-                    return found
+                if values?.isDirectory == true,
+                   values?.isApplication != true,
+                   values?.isPackage != true,
+                   values?.isSymbolicLink != true {
+                    let children = try? fileManager.contentsOfDirectory(
+                        at: canonical,
+                        includingPropertiesForKeys: keys,
+                        options: [.skipsHiddenFiles]
+                    )
+                    pending.append(contentsOf: children ?? [])
                 }
             }
         }
-        return found
+        return FileSearchScanResult(results: found, deniedRoots: deniedRoots)
     }
 
-    private nonisolated static func makeResult(url: URL) -> FileSearchResult? {
-        let values = try? url.resourceValues(forKeys: [
+    private nonisolated static func makeResult(
+        url: URL,
+        values: URLResourceValues? = nil
+    ) -> FileSearchResult? {
+        let values = values ?? (try? url.resourceValues(forKeys: [
             .isDirectoryKey,
             .isApplicationKey,
             .contentModificationDateKey,
             .nameKey
-        ])
+        ]))
         let kind: FileSearchResult.Kind
         if values?.isApplication == true || url.pathExtension.lowercased() == "app" {
             kind = .application
@@ -232,6 +315,28 @@ public final class FileSearchIndex: ObservableObject {
             kind: kind,
             modifiedDate: values?.contentModificationDate
         )
+    }
+
+    private nonisolated static func permissionResult(for root: URL) -> FileSearchResult {
+        FileSearchResult(
+            url: URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
+            )!,
+            displayName: "macOS is blocking Omnicast from \(root.lastPathComponent). Open Privacy settings.",
+            kind: .permission,
+            modifiedDate: nil
+        )
+    }
+
+    private nonisolated static func isAccessDenied(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NSCocoaErrorDomain,
+           error.code == CocoaError.Code.fileReadNoPermission.rawValue {
+            return true
+        }
+        return error.domain == NSPOSIXErrorDomain
+            && (error.code == Int(POSIXErrorCode.EACCES.rawValue)
+                || error.code == Int(POSIXErrorCode.EPERM.rawValue))
     }
 
     private nonisolated static func mergeAndRank(
@@ -282,6 +387,15 @@ public final class FileSearchIndex: ObservableObject {
     private nonisolated static func uniqueStandardizedURLs(_ urls: [URL]) -> [URL] {
         var seen = Set<URL>()
         return urls.map(\.standardizedFileURL).filter { seen.insert($0).inserted }
+    }
+
+    private nonisolated static func defaultProtectedRoots() -> [URL] {
+        let manager = FileManager.default
+        return [
+            manager.urls(for: .downloadsDirectory, in: .userDomainMask).first,
+            manager.urls(for: .desktopDirectory, in: .userDomainMask).first,
+            manager.urls(for: .documentDirectory, in: .userDomainMask).first
+        ].compactMap { $0 }
     }
 }
 
