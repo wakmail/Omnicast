@@ -377,7 +377,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.appliedTheme = settings.theme
                 }
                 do {
-                    if self.appliedHotkeySettings != settings.hotkey {
+                    if self.hotkeyManager?.isShortcutCaptureActive != true,
+                       self.appliedHotkeySettings != settings.hotkey {
                         try self.hotkeyManager?.register(settings.hotkey)
                         self.appliedHotkeySettings = settings.hotkey
                     }
@@ -458,7 +459,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showLauncher() {
-        settingsWindowController?.close()
         pasteService?.rememberFrontmostApplication()
         emojiPasteService?.rememberFrontmostApplication()
         menuItemIndex?.captureTargetApplication()
@@ -503,7 +503,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 speechKeyStore: speechKeyStore,
                 extensionRegistry: extensionRegistry,
                 extensionStoreClient: extensionStoreClient,
-                onRegistryChanged: { [weak self] in self?.refreshCommands() }
+                onRegistryChanged: { [weak self] in self?.refreshCommands() },
+                onHotkeyRecordingChanged: { [weak self] recording in
+                    guard let self, let hotkey = self.settingsStore?.settings.hotkey else { return }
+                    do {
+                        try self.hotkeyManager?.setShortcutCaptureActive(recording, restoring: hotkey)
+                        if !recording {
+                            self.appliedHotkeySettings = hotkey
+                        }
+                    } catch {
+                        self.toastCenter.show(error.localizedDescription)
+                    }
+                }
             )
         }
         settingsWindowController?.show()

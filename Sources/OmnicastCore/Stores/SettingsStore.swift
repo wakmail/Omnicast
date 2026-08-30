@@ -56,6 +56,46 @@ public struct HotkeySettings: Codable, Equatable, Hashable, Sendable {
     public static let presets = [optionSpace, controlSpace, commandSpace]
 }
 
+public enum ShortcutValidationResult: Equatable, Sendable {
+    case accepted
+    case rejected(String)
+}
+
+public enum ShortcutValidator {
+    public static let commandModifier: UInt32 = 256
+    public static let shiftModifier: UInt32 = 512
+    public static let optionModifier: UInt32 = 2_048
+    public static let controlModifier: UInt32 = 4_096
+
+    public static let supportedModifiers = commandModifier
+        | shiftModifier
+        | optionModifier
+        | controlModifier
+
+    public static func validate(
+        keyCode: UInt32?,
+        modifiers: UInt32
+    ) -> ShortcutValidationResult {
+        guard let keyCode else {
+            return .rejected("A shortcut needs a key in addition to its modifiers.")
+        }
+        if isLetterKey(keyCode), modifiers & supportedModifiers == 0 {
+            return .rejected("Add a modifier when using a letter.")
+        }
+        return .accepted
+    }
+
+    private static func isLetterKey(_ keyCode: UInt32) -> Bool {
+        letterKeyCodes.contains(keyCode)
+    }
+
+    private static let letterKeyCodes: Set<UInt32> = [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+        11, 12, 13, 14, 15, 16, 17, 31, 32,
+        34, 35, 37, 38, 40, 45, 46
+    ]
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var hotkey: HotkeySettings
     public var theme: AppTheme

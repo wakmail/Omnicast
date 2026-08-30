@@ -61,4 +61,16 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.settings.speechEngine, .system)
         XCTAssertEqual(loaded.settings.systemSpeechRate, 0.5)
     }
+
+    func testDecodesLegacyPresetHotkey() throws {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "keyCode": 49,
+            "modifiers": 4_096,
+            "displayName": "Control Space"
+        ])
+
+        let hotkey = try JSONDecoder().decode(HotkeySettings.self, from: data)
+
+        XCTAssertEqual(hotkey, .controlSpace)
+    }
 }
