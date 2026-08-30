@@ -6,7 +6,6 @@ import OmnicastCore
 import OmnicastUI
 import SwiftUI
 
-@main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: LauncherPanel?
@@ -69,6 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             applyTheme(settingsStore.settings.theme)
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("com.omnicast.open"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.showLauncher() }
+            }
             settingsSubscription = settingsStore.$settings
                 .dropFirst()
                 .sink { [weak self] settings in
