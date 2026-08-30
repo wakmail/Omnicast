@@ -25,7 +25,14 @@ final class ExtensionHostTests: XCTestCase {
         XCTAssertTrue(errors.isEmpty, errors.map(\.message).joined(separator: "\n"))
     }
 
-    private func renderFixture() async throws -> HostHarness {
+    func testFixtureCommandListsRunningProcesses() async throws {
+        let harness = try await renderFixture(attempts: 600)
+        defer { harness.stop() }
+
+        XCTAssertGreaterThan(harness.host.renderedItemCount, 0)
+    }
+
+    private func renderFixture(attempts: Int = 200) async throws -> HostHarness {
         let fixtureURL = try XCTUnwrap(Bundle.module.url(
             forResource: "kill-process",
             withExtension: nil,
@@ -51,7 +58,7 @@ final class ExtensionHostTests: XCTestCase {
         let webView = host.makeWebView()
         var contentProcessUnavailable = false
 
-        for _ in 0..<200 {
+        for _ in 0..<attempts {
             try await Task.sleep(nanoseconds: 50_000_000)
             if host.renderedItemCount > 0 {
                 try await Task.sleep(nanoseconds: 100_000_000)
