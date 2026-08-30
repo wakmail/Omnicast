@@ -9,6 +9,7 @@ final class LauncherPanel: NSPanel {
     let keyEvents: LauncherKeyEvents
     var onPositionChanged: ((LauncherWindowPosition) -> Void)?
     private var previousApplication: NSRunningApplication?
+    private weak var previousKeyWindow: NSWindow?
     private var positioningProgrammatically = false
     private var positionSaveWorkItem: DispatchWorkItem?
 
@@ -41,6 +42,12 @@ final class LauncherPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     func showNearTop(position: LauncherWindowPosition?) {
+        if let keyWindow = NSApp.keyWindow, keyWindow !== self, keyWindow.isVisible {
+            previousKeyWindow = keyWindow
+        } else {
+            previousKeyWindow = nil
+        }
+
         let currentPID = ProcessInfo.processInfo.processIdentifier
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.processIdentifier != currentPID {
@@ -81,8 +88,15 @@ final class LauncherPanel: NSPanel {
     func hide(returningFocus: Bool) {
         orderOut(nil)
         if returningFocus {
-            previousApplication?.activate()
+            if let previousKeyWindow, previousKeyWindow.isVisible {
+                NSApp.activate(ignoringOtherApps: true)
+                previousKeyWindow.makeKeyAndOrderFront(nil)
+            } else {
+                previousApplication?.activate()
+            }
         }
+        previousKeyWindow = nil
+        previousApplication = nil
     }
 
     override func resignKey() {

@@ -14,8 +14,39 @@ struct HyperKeyMapping: Codable, Equatable, Sendable {
 
 enum HyperKeyMappingCodec {
     static let capsLockUsage: UInt64 = 0x700000039
+    static let rightCommandUsage: UInt64 = 0x7000000E7
+    static let rightOptionUsage: UInt64 = 0x7000000E6
     static let function18Usage: UInt64 = 0x70000006D
     static let rightControlUsage: UInt64 = 0x7000000E4
+    static let fnUsage: UInt64 = 0xFF00000003
+
+    static func sourceUsage(for sourceKey: HyperKeySourceKey) -> UInt64 {
+        switch sourceKey {
+        case .capsLock: capsLockUsage
+        case .rightCommand: rightCommandUsage
+        case .rightOption: rightOptionUsage
+        case .rightControl: rightControlUsage
+        case .fn: fnUsage
+        }
+    }
+
+    static func destinationUsage(for target: HyperKeyRemapTarget) -> UInt64 {
+        switch target {
+        case .function18: function18Usage
+        case .rightControl: rightControlUsage
+        }
+    }
+
+    static func mappings(
+        sourceKey: HyperKeySourceKey,
+        target: HyperKeyRemapTarget,
+        preserving existingMappings: [HyperKeyMapping]
+    ) -> [HyperKeyMapping] {
+        let source = sourceUsage(for: sourceKey)
+        return existingMappings.filter { $0.source != source } + [
+            HyperKeyMapping(source: source, destination: destinationUsage(for: target))
+        ]
+    }
 
     static func parse(_ output: String) -> [HyperKeyMapping] {
         let pattern = #"HIDKeyboardModifierMappingSrc\s*=\s*(\d+)[^}]*HIDKeyboardModifierMappingDst\s*=\s*(\d+)"#
@@ -50,26 +81,19 @@ enum HyperKeyMappingCodec {
 }
 
 struct HyperKeyMappingRunner {
-    func apply(target: HyperKeyRemapTarget) throws {
-        var mappings = try currentMappings().filter {
-            $0.source != HyperKeyMappingCodec.capsLockUsage
-        }
-        let destination: UInt64
-        switch target {
-        case .function18:
-            destination = HyperKeyMappingCodec.function18Usage
-        case .rightControl:
-            destination = HyperKeyMappingCodec.rightControlUsage
-        }
-        mappings.append(
-            HyperKeyMapping(source: HyperKeyMappingCodec.capsLockUsage, destination: destination)
+    func apply(sourceKey: HyperKeySourceKey, target: HyperKeyRemapTarget) throws {
+        let mappings = HyperKeyMappingCodec.mappings(
+            sourceKey: sourceKey,
+            target: target,
+            preserving: try currentMappings()
         )
         try setMappings(mappings)
     }
 
-    func removeCapsLockMapping() throws {
+    func removeMapping(for sourceKey: HyperKeySourceKey) throws {
+        let source = HyperKeyMappingCodec.sourceUsage(for: sourceKey)
         let mappings = try currentMappings().filter {
-            $0.source != HyperKeyMappingCodec.capsLockUsage
+            $0.source != source
         }
         try setMappings(mappings)
     }

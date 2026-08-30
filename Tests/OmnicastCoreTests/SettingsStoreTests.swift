@@ -14,7 +14,10 @@ final class SettingsStoreTests: XCTestCase {
             settings.hotkey = .controlSpace
             settings.theme = .dark
             settings.launchAtLogin = true
-            settings.hyperKey = HyperKeySettings(mode: .escape, enabled: true)
+            settings.hyperKey = HyperKeySettings(
+                tapAction: .keyboardShortcut(keyCode: 45, modifiers: 1_310_720),
+                enabled: true
+            )
             settings.snippetsEnabled = true
             settings.dictationEnabled = true
             settings.launcherPosition = LauncherWindowPosition(x: 120, y: 340)
@@ -57,5 +60,17 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.settings.defaultAIProvider, .openAI)
         XCTAssertEqual(loaded.settings.speechEngine, .system)
         XCTAssertEqual(loaded.settings.systemSpeechRate, 0.5)
+    }
+
+    func testDecodesLegacyPresetHotkey() throws {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "keyCode": 49,
+            "modifiers": 4_096,
+            "displayName": "Control Space"
+        ])
+
+        let hotkey = try JSONDecoder().decode(HotkeySettings.self, from: data)
+
+        XCTAssertEqual(hotkey, .controlSpace)
     }
 }

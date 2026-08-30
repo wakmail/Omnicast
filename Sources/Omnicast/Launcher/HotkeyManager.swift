@@ -20,6 +20,7 @@ final class HotkeyManager {
     private var hotkeyReference: EventHotKeyRef?
     private var handlerReference: EventHandlerRef?
     private let action: () -> Void
+    private(set) var isShortcutCaptureActive = false
 
     init(action: @escaping () -> Void) {
         self.action = action
@@ -43,10 +44,7 @@ final class HotkeyManager {
     }
 
     func register(_ hotkey: HotkeySettings) throws {
-        if let hotkeyReference {
-            UnregisterEventHotKey(hotkeyReference)
-            self.hotkeyReference = nil
-        }
+        unregister()
 
         let identifier = EventHotKeyID(
             signature: fourCharacterCode("OMNI"),
@@ -62,6 +60,26 @@ final class HotkeyManager {
         )
         guard status == noErr else {
             throw HotkeyError.registrationFailed(status)
+        }
+    }
+
+    func unregister() {
+        if let hotkeyReference {
+            UnregisterEventHotKey(hotkeyReference)
+            self.hotkeyReference = nil
+        }
+    }
+
+    func setShortcutCaptureActive(
+        _ active: Bool,
+        restoring hotkey: HotkeySettings
+    ) throws {
+        guard isShortcutCaptureActive != active else { return }
+        isShortcutCaptureActive = active
+        if active {
+            unregister()
+        } else {
+            try register(hotkey)
         }
     }
 

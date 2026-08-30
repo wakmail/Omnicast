@@ -14,6 +14,7 @@ public struct SettingsTabsView: View {
     private let hyperKeyEnableController: PermissionFeatureController
     private let dictationEnableController: PermissionFeatureController
     private let extensionsView: AnyView
+    private let onHotkeyRecordingChanged: (Bool) -> Void
 
     @MainActor
     public init(
@@ -26,7 +27,8 @@ public struct SettingsTabsView: View {
         snippetEnableController: PermissionFeatureController,
         hyperKeyEnableController: PermissionFeatureController,
         dictationEnableController: PermissionFeatureController,
-        extensionsView: AnyView
+        extensionsView: AnyView,
+        onHotkeyRecordingChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         self.store = store
         self.snippetStore = snippetStore
@@ -38,13 +40,15 @@ public struct SettingsTabsView: View {
         self.hyperKeyEnableController = hyperKeyEnableController
         self.dictationEnableController = dictationEnableController
         self.extensionsView = extensionsView
+        self.onHotkeyRecordingChanged = onHotkeyRecordingChanged
     }
 
     public var body: some View {
         TabView {
             SettingsView(
                 store: store,
-                onHotkeyChange: { _ in }
+                onHotkeyChange: { _ in },
+                onHotkeyRecordingChanged: onHotkeyRecordingChanged
             )
             .tabItem { Label("General", systemImage: "gear") }
 

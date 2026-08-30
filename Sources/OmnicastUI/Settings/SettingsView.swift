@@ -6,23 +6,25 @@ import SwiftUI
 public struct SettingsView: View {
     @ObservedObject private var store: SettingsStore
     private let onHotkeyChange: (HotkeySettings) -> Void
+    private let onHotkeyRecordingChanged: (Bool) -> Void
     @State private var errorMessage: String?
 
     public init(
         store: SettingsStore,
-        onHotkeyChange: @escaping (HotkeySettings) -> Void
+        onHotkeyChange: @escaping (HotkeySettings) -> Void,
+        onHotkeyRecordingChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         self.store = store
         self.onHotkeyChange = onHotkeyChange
+        self.onHotkeyRecordingChanged = onHotkeyRecordingChanged
     }
 
     public var body: some View {
         Form {
-            Picker("Global shortcut", selection: hotkeyBinding) {
-                ForEach(HotkeySettings.presets, id: \.displayName) { hotkey in
-                    Text(hotkey.displayName).tag(hotkey)
-                }
-            }
+            ShortcutRecorderView(
+                shortcut: hotkeyBinding,
+                onRecordingChanged: onHotkeyRecordingChanged
+            )
 
             Picker("Theme", selection: themeBinding) {
                 ForEach(AppTheme.allCases, id: \.self) { theme in
