@@ -35,7 +35,7 @@ public final class HyperKeyManager {
     private let applicationLauncher: (String) -> Void
     private var eventState: HyperKeyEventState?
     private var runLoopSource: CFRunLoopSource?
-    private var mappingApplied = false
+    private var mappedSourceKey: HyperKeySourceKey?
 
     public init(
         settings: HyperKeySettings = HyperKeySettings(),
@@ -86,29 +86,20 @@ public final class HyperKeyManager {
     public func enable() throws {
         guard settings.enabled, !isRunning else { return }
 
-        let usesMapping = settings.tapAction != .toggleCapsLock
-        if usesMapping {
-            try mappingRunner.apply(target: remapTarget)
-            mappingApplied = true
-        }
+        try mappingRunner.apply(sourceKey: settings.sourceKey, target: remapTarget)
+        mappedSourceKey = settings.sourceKey
 
         do {
-            let sourceCode: CGKeyCode
-            switch (settings.tapAction, remapTarget) {
-            case (.toggleCapsLock, _): sourceCode = 57
-            case (_, .function18): sourceCode = 79
-            case (_, .rightControl): sourceCode = 62
-            }
             try installEventTap(
-                sourceCode: sourceCode,
-                sourceIsRemapped: usesMapping,
+                sourceCode: remapTarget.keyCode,
+                originalSourceCode: settings.sourceKey.keyCode,
                 tapAction: settings.tapAction
             )
             isRunning = true
         } catch {
-            if mappingApplied {
-                try? mappingRunner.removeCapsLockMapping()
-                mappingApplied = false
+            if let mappedSourceKey {
+                try? mappingRunner.removeMapping(for: mappedSourceKey)
+                self.mappedSourceKey = nil
             }
             throw error
         }
@@ -117,15 +108,15 @@ public final class HyperKeyManager {
     public func disable() throws {
         defer { isRunning = false }
         removeEventTap()
-        if mappingApplied {
-            try mappingRunner.removeCapsLockMapping()
-            mappingApplied = false
+        if let mappedSourceKey {
+            try mappingRunner.removeMapping(for: mappedSourceKey)
+            self.mappedSourceKey = nil
         }
     }
 
     private func installEventTap(
         sourceCode: CGKeyCode,
-        sourceIsRemapped: Bool,
+        originalSourceCode: CGKeyCode,
         tapAction: HyperKeyTapAction
     ) throws {
         let tapStateMachine = HyperKeyTapStateMachine(
@@ -136,9 +127,9 @@ public final class HyperKeyManager {
         )
         let state = HyperKeyEventState(
             sourceCode: sourceCode,
-            sourceIsRemapped: sourceIsRemapped,
+            originalSourceCode: originalSourceCode,
             tapStateMachine: tapStateMachine,
-            rightControlSource: sourceIsRemapped && remapTarget == .rightControl
+            rightControlSource: remapTarget == .rightControl
         )
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
             | CGEventMask(1 << CGEventType.keyUp.rawValue)
@@ -182,36 +173,31 @@ private let hyperFlags: CGEventFlags = [.maskCommand, .maskControl, .maskAlterna
 
 private final class HyperKeyEventState {
     let sourceCode: CGKeyCode
-    let sourceIsRemapped: Bool
+    let originalSourceCode: CGKeyCode
     let tapStateMachine: HyperKeyTapStateMachine
     let rightControlSource: Bool
     var eventTap: CFMachPort?
 
     init(
         sourceCode: CGKeyCode,
-        sourceIsRemapped: Bool,
+        originalSourceCode: CGKeyCode,
         tapStateMachine: HyperKeyTapStateMachine,
         rightControlSource: Bool
     ) {
         self.sourceCode = sourceCode
-        self.sourceIsRemapped = sourceIsRemapped
+        self.originalSourceCode = originalSourceCode
         self.tapStateMachine = tapStateMachine
         self.rightControlSource = rightControlSource
     }
 
-    var isCapsLockToggle: Bool {
-        !sourceIsRemapped && sourceCode == 57
-    }
-
     func isSource(_ keyCode: CGKeyCode) -> Bool {
-        keyCode == sourceCode || sourceIsRemapped && keyCode == 57
+        keyCode == sourceCode || keyCode == originalSourceCode
     }
 }
 
 final class HyperKeyTapStateMachine {
     private(set) var sourceKeyDown = false
     private(set) var comboFired = false
-    private(set) var pressSequence = 0
 
     private let action: HyperKeyTapAction
     private let eventPoster: (CGKeyCode, CGEventFlags) -> Void
@@ -230,18 +216,10 @@ final class HyperKeyTapStateMachine {
         self.applicationLauncher = applicationLauncher
     }
 
-    @discardableResult
-    func beginSourcePress() -> Int {
-        guard !sourceKeyDown else { return pressSequence }
-        return restartSourcePress()
-    }
-
-    @discardableResult
-    func restartSourcePress() -> Int {
+    func beginSourcePress() {
+        guard !sourceKeyDown else { return }
         sourceKeyDown = true
         comboFired = false
-        pressSequence &+= 1
-        return pressSequence
     }
 
     func markComboFired() {
@@ -257,14 +235,9 @@ final class HyperKeyTapStateMachine {
         }
     }
 
-    func expireSourcePress(sequence: Int) {
-        guard sourceKeyDown, pressSequence == sequence else { return }
-        sourceKeyDown = false
-    }
-
     private func performTapAction() {
         switch action {
-        case .none, .toggleCapsLock:
+        case .none:
             break
         case .escape:
             eventPoster(53, [])
@@ -274,6 +247,8 @@ final class HyperKeyTapStateMachine {
             eventPoster(CGKeyCode(keyCode), CGEventFlags(rawValue: modifiers))
         case .openApplication(let bundleIdentifier):
             applicationLauncher(bundleIdentifier)
+        case .toggleCapsLock:
+            eventPoster(57, [])
         }
     }
 }
@@ -296,15 +271,7 @@ private let hyperKeyEventCallback: CGEventTapCallBack = { _, type, event, userIn
     let isSource = state.isSource(keyCode)
     let tapStateMachine = state.tapStateMachine
 
-    if state.isCapsLockToggle && isSource && type == .flagsChanged {
-        let sequence = tapStateMachine.restartSourcePress()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            tapStateMachine.expireSourcePress(sequence: sequence)
-        }
-        return Unmanaged.passUnretained(event)
-    }
-
-    if state.sourceIsRemapped && isSource {
+    if isSource {
         if type == .keyDown {
             tapStateMachine.beginSourcePress()
             return nil
@@ -334,6 +301,27 @@ private let hyperKeyEventCallback: CGEventTapCallBack = { _, type, event, userIn
         return Unmanaged.passUnretained(event)
     }
     return Unmanaged.passUnretained(event)
+}
+
+private extension HyperKeySourceKey {
+    var keyCode: CGKeyCode {
+        switch self {
+        case .capsLock: 57
+        case .rightCommand: 54
+        case .rightOption: 61
+        case .rightControl: 62
+        case .fn: 63
+        }
+    }
+}
+
+private extension HyperKeyRemapTarget {
+    var keyCode: CGKeyCode {
+        switch self {
+        case .function18: 79
+        case .rightControl: 62
+        }
+    }
 }
 
 private func postSyntheticShortcut(_ keyCode: CGKeyCode, _ flags: CGEventFlags) {

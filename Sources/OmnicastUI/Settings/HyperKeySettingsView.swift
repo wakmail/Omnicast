@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
 import OmnicastCore
 import SwiftUI
 
@@ -20,11 +21,27 @@ public struct HyperKeySettingsView: View {
 
     public var body: some View {
         Form {
-            Text("Use Caps Lock as Command, Control, Option, and Shift when held.")
+            Text("Use one key as Command, Control, Option, and Shift when held.")
                 .font(LauncherTheme.Typography.rowSubtitle)
                 .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
 
             Toggle("Enable Hyper Key", isOn: enabledBinding)
+
+            Picker("Source key", selection: sourceKeyBinding) {
+                ForEach(HyperKeySourceKey.allCases, id: \.self) { sourceKey in
+                    Text(sourceKey.displayName).tag(sourceKey)
+                }
+            }
+
+            Text("Caps Lock is the classic choice.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if karabinerDetected {
+                Text("Karabiner is also installed or running, and using two key remappers can cause conflicts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if enableController.isWaiting {
                 Text(PermissionFeature.hyperKey.waitingMessage)
@@ -83,6 +100,23 @@ public struct HyperKeySettingsView: View {
         )
     }
 
+    private var sourceKeyBinding: Binding<HyperKeySourceKey> {
+        Binding(
+            get: { store.settings.hyperKey.sourceKey },
+            set: updateSourceKey
+        )
+    }
+
+    private var karabinerDetected: Bool {
+        let configURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/karabiner/karabiner.json")
+        let processDetected = NSWorkspace.shared.runningApplications.contains { application in
+            application.bundleIdentifier?.localizedCaseInsensitiveContains("karabiner") == true
+                || application.localizedName?.localizedCaseInsensitiveContains("karabiner") == true
+        }
+        return processDetected || FileManager.default.fileExists(atPath: configURL.path)
+    }
+
     private func updateShortcut(keyCode: UInt16, modifiers: UInt64) {
         updateAction(.keyboardShortcut(keyCode: keyCode, modifiers: modifiers))
     }
@@ -91,12 +125,33 @@ public struct HyperKeySettingsView: View {
         updateAction(.openApplication(bundleIdentifier: bundleIdentifier))
     }
 
+    private func updateSourceKey(_ sourceKey: HyperKeySourceKey) {
+        do {
+            try store.update { $0.hyperKey.sourceKey = sourceKey }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func updateAction(_ action: HyperKeyTapAction) {
         do {
             try store.update { $0.hyperKey.tapAction = action }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private extension HyperKeySourceKey {
+    var displayName: String {
+        switch self {
+        case .capsLock: "Caps Lock"
+        case .rightCommand: "Right Command"
+        case .rightOption: "Right Option"
+        case .rightControl: "Right Control"
+        case .fn: "Fn"
         }
     }
 }

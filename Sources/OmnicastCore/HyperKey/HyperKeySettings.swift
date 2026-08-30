@@ -8,6 +8,14 @@ public enum HyperKeyMode: String, Codable, CaseIterable, Sendable {
     case toggle
 }
 
+public enum HyperKeySourceKey: String, Codable, CaseIterable, Sendable {
+    case capsLock
+    case rightCommand
+    case rightOption
+    case rightControl
+    case fn
+}
+
 public enum HyperKeyTapAction: Codable, Equatable, Sendable {
     case none
     case escape
@@ -80,15 +88,26 @@ public enum HyperKeyTapAction: Codable, Equatable, Sendable {
 public struct HyperKeySettings: Codable, Equatable, Sendable {
     public var tapAction: HyperKeyTapAction
     public var enabled: Bool
+    public var sourceKey: HyperKeySourceKey
 
-    public init(tapAction: HyperKeyTapAction = .none, enabled: Bool = false) {
+    public init(
+        tapAction: HyperKeyTapAction = .none,
+        enabled: Bool = false,
+        sourceKey: HyperKeySourceKey = .capsLock
+    ) {
         self.tapAction = tapAction
         self.enabled = enabled
+        self.sourceKey = sourceKey
     }
 
-    public init(mode: HyperKeyMode, enabled: Bool = false) {
+    public init(
+        mode: HyperKeyMode,
+        enabled: Bool = false,
+        sourceKey: HyperKeySourceKey = .capsLock
+    ) {
         tapAction = Self.tapAction(for: mode)
         self.enabled = enabled
+        self.sourceKey = sourceKey
     }
 
     public var mode: HyperKeyMode {
@@ -106,11 +125,14 @@ public struct HyperKeySettings: Codable, Equatable, Sendable {
         case tapAction
         case mode
         case enabled
+        case sourceKey
     }
 
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        sourceKey = try values.decodeIfPresent(HyperKeySourceKey.self, forKey: .sourceKey)
+            ?? .capsLock
         if let action = try values.decodeIfPresent(HyperKeyTapAction.self, forKey: .tapAction) {
             tapAction = action
         } else {
@@ -123,6 +145,7 @@ public struct HyperKeySettings: Codable, Equatable, Sendable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(tapAction, forKey: .tapAction)
         try values.encode(enabled, forKey: .enabled)
+        try values.encode(sourceKey, forKey: .sourceKey)
     }
 
     private static func tapAction(for mode: HyperKeyMode) -> HyperKeyTapAction {

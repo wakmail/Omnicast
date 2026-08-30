@@ -16,8 +16,13 @@ final class HyperKeyTests: XCTestCase {
             .toggleCapsLock
         ]
 
-        for action in actions {
-            let settings = HyperKeySettings(tapAction: action, enabled: true)
+        for (index, action) in actions.enumerated() {
+            let sourceKey = HyperKeySourceKey.allCases[index % HyperKeySourceKey.allCases.count]
+            let settings = HyperKeySettings(
+                tapAction: action,
+                enabled: true,
+                sourceKey: sourceKey
+            )
             let data = try JSONEncoder().encode(settings)
             XCTAssertEqual(
                 try JSONDecoder().decode(HyperKeySettings.self, from: data),
@@ -45,6 +50,17 @@ final class HyperKeyTests: XCTestCase {
         XCTAssertEqual(
             try JSONDecoder().decode(HyperKeySettings.self, from: data),
             HyperKeySettings(tapAction: .none, enabled: true)
+        )
+    }
+
+    func testSettingsWithoutSourceKeyMigrateToCapsLock() throws {
+        let data = try XCTUnwrap(
+            "{\"tapAction\":{\"type\":\"escape\"},\"enabled\":true}".data(using: .utf8)
+        )
+
+        XCTAssertEqual(
+            try JSONDecoder().decode(HyperKeySettings.self, from: data),
+            HyperKeySettings(tapAction: .escape, enabled: true, sourceKey: .capsLock)
         )
     }
 
@@ -80,6 +96,19 @@ final class HyperKeyTests: XCTestCase {
         state.endSourcePress()
 
         XCTAssertTrue(postedKeyCodes.isEmpty)
+    }
+
+    func testNaturalCapsLockTapPostsCapsLockKey() {
+        var postedKeyCodes: [CGKeyCode] = []
+        let state = HyperKeyTapStateMachine(
+            action: .toggleCapsLock,
+            eventPoster: { keyCode, _ in postedKeyCodes.append(keyCode) }
+        )
+
+        state.beginSourcePress()
+        state.endSourcePress()
+
+        XCTAssertEqual(postedKeyCodes, [57])
     }
 
     func testTapRoutesCallbackActions() {
@@ -137,5 +166,39 @@ final class HyperKeyTests: XCTestCase {
         let mappings = try XCTUnwrap(object["UserKeyMapping"] as? [[String: NSNumber]])
         XCTAssertEqual(mappings.first?["HIDKeyboardModifierMappingSrc"]?.uint64Value, mapping.source)
         XCTAssertEqual(mappings.first?["HIDKeyboardModifierMappingDst"]?.uint64Value, mapping.destination)
+    }
+
+    func testMappingPropertyGenerationForEverySourceKey() throws {
+        let expectedUsages: [HyperKeySourceKey: UInt64] = [
+            .capsLock: 0x700000039,
+            .rightCommand: 0x7000000E7,
+            .rightOption: 0x7000000E6,
+            .rightControl: 0x7000000E4,
+            .fn: 0xFF00000003
+        ]
+        let preserved = HyperKeyMapping(source: 0x700000004, destination: 0x700000005)
+
+        for sourceKey in HyperKeySourceKey.allCases {
+            let generated = HyperKeyMappingCodec.mappings(
+                sourceKey: sourceKey,
+                target: .function18,
+                preserving: [preserved]
+            )
+            let data = try XCTUnwrap(
+                try HyperKeyMappingCodec.propertyJSON(for: generated).data(using: .utf8)
+            )
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let mappings = try XCTUnwrap(object["UserKeyMapping"] as? [[String: NSNumber]])
+
+            XCTAssertEqual(mappings.count, 2)
+            XCTAssertEqual(
+                mappings.last?["HIDKeyboardModifierMappingSrc"]?.uint64Value,
+                expectedUsages[sourceKey]
+            )
+            XCTAssertEqual(
+                mappings.last?["HIDKeyboardModifierMappingDst"]?.uint64Value,
+                HyperKeyMappingCodec.function18Usage
+            )
+        }
     }
 }
