@@ -72,7 +72,10 @@ public struct ColorHistoryView: View {
             HStack {
                 Text("\(model.items.count) colors")
                 Spacer()
-                Text("Enter copies")
+                FooterActionButton("Copy", keys: ["Enter"]) {
+                    model.copySelected()
+                }
+                .disabled(model.selectedItem == nil)
             }
             .font(LauncherTheme.Typography.footerTitle)
             .foregroundStyle(secondaryText)

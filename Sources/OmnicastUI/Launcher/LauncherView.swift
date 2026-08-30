@@ -6,6 +6,7 @@ import SwiftUI
 public struct LauncherView: View {
     @StateObject private var model: LauncherViewModel
     @ObservedObject private var toasts: ToastCenter
+    @ObservedObject private var settingsStore: SettingsStore
     @Environment(\.colorScheme) private var colorScheme
     private let onImportRayconfig: (URL) -> Void
 
@@ -16,6 +17,7 @@ public struct LauncherView: View {
         frecencyStore: FrecencyStore,
         keyEvents: LauncherKeyEvents,
         toasts: ToastCenter,
+        settingsStore: SettingsStore,
         webSearchBangs: WebSearchBangs = WebSearchBangs(),
         calculatorProvider: CalculatorProvider = CalculatorProvider(),
         presentingCommands: [String: LauncherCommandPresenter] = [:],
@@ -37,6 +39,7 @@ public struct LauncherView: View {
             onOpenSettings: onOpenSettings
         ))
         self.toasts = toasts
+        self.settingsStore = settingsStore
         self.onImportRayconfig = onImportRayconfig
     }
 
@@ -82,7 +85,7 @@ public struct LauncherView: View {
         }
         .frame(
             width: LauncherTheme.Metrics.panelWidth,
-            height: LauncherTheme.Metrics.panelHeight
+            height: LauncherTheme.Metrics.panelHeight(for: settingsStore.settings.windowMode)
         )
         .clipShape(panelShape)
         .overlay {
@@ -212,35 +215,32 @@ public struct LauncherView: View {
 
             HStack(spacing: LauncherTheme.Metrics.footerGroupSpacing) {
                 if !model.isAtRoot {
-                    HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
-                        Text("Back")
-                            .font(LauncherTheme.Typography.footerAction)
-                            .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
-                        KeyCap("Esc")
+                    FooterActionButton("Back", keys: ["Esc"]) {
+                        _ = model.pop()
                     }
                 } else if case .confirmation = model.inputMode {
-                    footerHint("Confirm", key: "Enter")
-                    footerHint("Cancel", key: "Esc")
-                } else if case .argument = model.inputMode {
-                    footerHint("Continue", key: "Enter")
-                    footerHint("Cancel", key: "Esc")
-                } else {
-                    footerHint("Open", key: "Enter")
-
-                    Button {
-                        model.actionPanelVisible.toggle()
-                    } label: {
-                        HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
-                            Text("Actions")
-                                .font(LauncherTheme.Typography.footerTitle)
-                                .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
-                            HStack(spacing: LauncherTheme.Metrics.keyCapSpacing) {
-                                KeyCap("⌘")
-                                KeyCap("K")
-                            }
-                        }
+                    FooterActionButton("Confirm", keys: ["Enter"]) {
+                        model.executeSelected()
                     }
-                    .buttonStyle(.plain)
+                    FooterActionButton("Cancel", keys: ["Esc"]) {
+                        model.cancelInputFromFooter()
+                    }
+                } else if case .argument = model.inputMode {
+                    FooterActionButton("Continue", keys: ["Enter"]) {
+                        model.executeSelected()
+                    }
+                    FooterActionButton("Cancel", keys: ["Esc"]) {
+                        model.cancelInputFromFooter()
+                    }
+                } else {
+                    FooterActionButton("Open", keys: ["Enter"]) {
+                        model.executeSelected()
+                    }
+                    .disabled(model.selectedCommand == nil)
+
+                    FooterActionButton("Actions", keys: ["⌘", "K"]) {
+                        model.actionPanelVisible.toggle()
+                    }
                     .popover(isPresented: $model.actionPanelVisible, arrowEdge: .bottom) {
                         actionPanel
                     }
@@ -251,19 +251,9 @@ public struct LauncherView: View {
         .frame(height: LauncherTheme.Metrics.footerHeight)
     }
 
-    private func footerHint(_ title: String, key: String) -> some View {
-        HStack(spacing: LauncherTheme.Metrics.footerLabelSpacing) {
-            Text(title)
-                .font(LauncherTheme.Typography.footerAction)
-                .foregroundStyle(LauncherTheme.Palette.primaryText(for: colorScheme))
-            KeyCap(key)
-        }
-    }
-
     private var actionPanel: some View {
         VStack(alignment: .leading, spacing: LauncherTheme.Metrics.actionPanelSpacing) {
             Button("Open") { model.executeSelected() }
-                .keyboardShortcut(.return, modifiers: [])
 
             if model.selectedCommand?.resourceURL != nil {
                 Button("Show in Finder") { model.revealSelected() }
@@ -285,33 +275,5 @@ public struct LauncherView: View {
             cornerRadius: LauncherTheme.Metrics.panelCornerRadius,
             style: .continuous
         )
-    }
-}
-
-private struct KeyCap: View {
-    let label: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    init(_ label: String) {
-        self.label = label
-    }
-
-    var body: some View {
-        Text(label)
-            .font(LauncherTheme.Typography.keyCap)
-            .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
-            .padding(.horizontal, LauncherTheme.Metrics.keyCapHorizontalPadding)
-            .frame(
-                minWidth: LauncherTheme.Metrics.keyCapMinimumWidth,
-                minHeight: LauncherTheme.Metrics.keyCapHeight,
-                maxHeight: LauncherTheme.Metrics.keyCapHeight
-            )
-            .background(
-                LauncherTheme.Palette.keyCap(for: colorScheme),
-                in: RoundedRectangle(
-                    cornerRadius: LauncherTheme.Metrics.keyCapCornerRadius,
-                    style: .continuous
-                )
-            )
     }
 }

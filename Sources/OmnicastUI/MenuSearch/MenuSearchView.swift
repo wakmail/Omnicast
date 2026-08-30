@@ -90,7 +90,10 @@ public struct MenuSearchView: View {
             HStack {
                 Text(model.applicationName)
                 Spacer()
-                Text("Enter runs menu item")
+                FooterActionButton("Run", keys: ["Enter"]) {
+                    model.pressSelected()
+                }
+                .disabled(model.selectedItem?.isEnabled != true)
             }
             .font(LauncherTheme.Typography.footerTitle)
             .foregroundStyle(secondaryText)

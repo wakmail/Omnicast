@@ -57,6 +57,7 @@ final class LauncherViewModel: ObservableObject {
         self.presentingCommands = presentingCommands
         self.onHide = onHide
         self.onOpenSettings = onOpenSettings
+        keyEvents.activateRootList()
 
         keyEvents.$latest
             .compactMap { $0?.key }
@@ -151,6 +152,10 @@ final class LauncherViewModel: ObservableObject {
         finishPreparation()
     }
 
+    func cancelInputFromFooter() {
+        cancelInput()
+    }
+
     func revealSelected() {
         guard let url = selectedCommand?.resourceURL else { return }
         context.opener.reveal(url)
@@ -170,6 +175,7 @@ final class LauncherViewModel: ObservableObject {
         let previousQuery = query
         navigation.push(NavigationEntry(view: view, previousQuery: previousQuery))
         navigationDepth = navigation.depth
+        updateKeySurface()
         if let initialQuery = view.initialQuery {
             query = initialQuery
         } else {
@@ -183,6 +189,7 @@ final class LauncherViewModel: ObservableObject {
         guard let entry = navigation.pop() else { return false }
         entry.view.onDismiss()
         navigationDepth = navigation.depth
+        updateKeySurface()
         query = entry.previousQuery
         navigation.current?.view.onQueryChange(query)
         return true
@@ -193,7 +200,9 @@ final class LauncherViewModel: ObservableObject {
             entry.view.onDismiss()
         }
         navigationDepth = 0
+        updateKeySurface()
         cancelInput(restoringQuery: false)
+        query = ""
         updateResults()
     }
 
@@ -402,6 +411,31 @@ final class LauncherViewModel: ObservableObject {
         case .escape:
             break
         }
+    }
+
+    private func updateKeySurface() {
+        guard !navigation.isRoot else {
+            keyEvents.activateRootList()
+            return
+        }
+        keyEvents.activatePushedView { [weak self] key in
+            self?.handlePushedKey(key) ?? false
+        }
+    }
+
+    private func handlePushedKey(_ key: LauncherKey) -> Bool {
+        if key == .escape {
+            handle(key)
+            return true
+        }
+        if presentedView?.onKey(key) == true {
+            return true
+        }
+        if key == .settings {
+            onOpenSettings()
+            return true
+        }
+        return false
     }
 }
 

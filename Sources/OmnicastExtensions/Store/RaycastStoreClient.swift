@@ -20,6 +20,7 @@ public struct RaycastStoreExtension: Decodable, Equatable, Sendable {
     public let description: String
     public let author: String
     public let iconURL: URL?
+    public let screenshotURLs: [URL]
     public let categories: [String]
     public let platforms: [String]
     public let commands: [RaycastStoreCommand]
@@ -33,6 +34,9 @@ public struct RaycastStoreExtension: Decodable, Equatable, Sendable {
         case iconURL
         case iconUrl
         case iconURLSnake = "icon_url"
+        case screenshotURLs
+        case screenshotUrls
+        case screenshotURLsSnake = "screenshot_urls"
         case categories
         case platforms
         case commands
@@ -50,6 +54,11 @@ public struct RaycastStoreExtension: Decodable, Equatable, Sendable {
             ?? container.decodeIfPresent(String.self, forKey: .iconUrl)
             ?? container.decodeIfPresent(String.self, forKey: .iconURLSnake)
         iconURL = icon.flatMap(URL.init(string:))
+        let screenshots = try container.decodeIfPresent([String].self, forKey: .screenshotURLs)
+            ?? container.decodeIfPresent([String].self, forKey: .screenshotUrls)
+            ?? container.decodeIfPresent([String].self, forKey: .screenshotURLsSnake)
+            ?? []
+        screenshotURLs = screenshots.compactMap(URL.init(string:))
         categories = try container.decodeIfPresent([String].self, forKey: .categories) ?? []
         platforms = try container.decodeIfPresent([String].self, forKey: .platforms) ?? []
         commands = try container.decodeIfPresent([RaycastStoreCommand].self, forKey: .commands) ?? []
@@ -64,6 +73,7 @@ public struct RaycastStoreExtension: Decodable, Equatable, Sendable {
         description: String,
         author: String,
         iconURL: URL? = nil,
+        screenshotURLs: [URL] = [],
         categories: [String] = [],
         platforms: [String] = [],
         commands: [RaycastStoreCommand] = [],
@@ -74,6 +84,7 @@ public struct RaycastStoreExtension: Decodable, Equatable, Sendable {
         self.description = description
         self.author = author
         self.iconURL = iconURL
+        self.screenshotURLs = screenshotURLs
         self.categories = categories
         self.platforms = platforms
         self.commands = commands
@@ -111,6 +122,7 @@ public protocol RaycastStoreServing: Sendable {
         offset: Int
     ) async throws -> RaycastStoreSearchResults
     func metadata(for slug: String) async throws -> RaycastStoreExtension
+    func screenshots(for slug: String) async throws -> [URL]
     func downloadBundle(for slug: String) async throws -> RaycastExtensionBundle
 }
 
@@ -176,6 +188,15 @@ public final class RaycastStoreClient: RaycastStoreServing, @unchecked Sendable 
         try await request(
             endpoint("extensions").appendingPathComponent(slug)
         )
+    }
+
+    public func screenshots(for slug: String) async throws -> [URL] {
+        let values: [String] = try await request(
+            endpoint("extensions")
+                .appendingPathComponent(slug)
+                .appendingPathComponent("screenshots")
+        )
+        return values.compactMap(URL.init(string:))
     }
 
     public func downloadBundle(for slug: String) async throws -> RaycastExtensionBundle {

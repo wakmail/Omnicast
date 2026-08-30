@@ -19,13 +19,13 @@ final class SettingsWindowController: NSWindowController {
         dictationEnableController: PermissionFeatureController,
         speechKeyStore: SpeechKeyStore,
         extensionRegistry: ExtensionRegistry,
-        extensionStoreClient: RaycastStoreClient,
+        extensionStoreCatalog: RaycastStoreCatalog,
         onRegistryChanged: @escaping () -> Void,
         onHotkeyRecordingChanged: @escaping (Bool) -> Void
     ) {
         let extensions = ExtensionSettingsView(
             registry: extensionRegistry,
-            client: extensionStoreClient,
+            catalog: extensionStoreCatalog,
             onRegistryChanged: onRegistryChanged
         )
         let view = SettingsTabsView(

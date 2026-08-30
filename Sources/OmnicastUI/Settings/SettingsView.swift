@@ -32,6 +32,31 @@ public struct SettingsView: View {
                 }
             }
 
+            Picker("Window mode", selection: windowModeBinding) {
+                ForEach(LauncherWindowMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+
+            LabeledContent("Pop to root") {
+                TextField("Seconds", value: popToRootTimeoutBinding, format: .number)
+                    .frame(width: 80)
+                Text("seconds")
+                    .foregroundStyle(.secondary)
+            }
+            Text("Set this to 0 to keep the current view until you leave it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Navigation style", selection: navigationStyleBinding) {
+                ForEach(LauncherNavigationStyle.allCases) { style in
+                    Text(style.displayName).tag(style)
+                }
+            }
+            Text("macOS style is visual only for now.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Toggle("Launch at login", isOn: launchAtLoginBinding)
 
             if let errorMessage {
@@ -70,6 +95,33 @@ public struct SettingsView: View {
             get: { store.settings.launchAtLogin },
             set: { enabled in
                 perform { try store.setLaunchAtLogin(enabled) }
+            }
+        )
+    }
+
+    private var windowModeBinding: Binding<LauncherWindowMode> {
+        Binding(
+            get: { store.settings.windowMode },
+            set: { mode in
+                perform { try store.update { $0.windowMode = mode } }
+            }
+        )
+    }
+
+    private var popToRootTimeoutBinding: Binding<Double> {
+        Binding(
+            get: { store.settings.popToRootTimeout },
+            set: { seconds in
+                perform { try store.update { $0.popToRootTimeout = max(0, seconds) } }
+            }
+        )
+    }
+
+    private var navigationStyleBinding: Binding<LauncherNavigationStyle> {
+        Binding(
+            get: { store.settings.navigationStyle },
+            set: { style in
+                perform { try store.update { $0.navigationStyle = style } }
             }
         )
     }

@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appliedTheme: AppTheme?
 
     private var extensionRegistry: ExtensionRegistry?
-    private var extensionStoreClient: RaycastStoreClient?
+    private var extensionStoreCatalog: RaycastStoreCatalog?
     private var extensionHost: ExtensionHost?
 
     private let windowAdjuster = WindowAdjuster()
@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let speechEngine = SwitchingSpeechEngine(activeEngine: initialSpeechEngine)
             let speechProvider = SpeechCommandsProvider(engine: speechEngine)
             let extensionStoreClient = RaycastStoreClient()
+            let extensionStoreCatalog = RaycastStoreCatalog(client: extensionStoreClient)
             let extensionRegistry = ExtensionRegistry(store: extensionStoreClient)
             let dictationPermissions = DictationPermissions()
             let permissions = PermissionsService(dictationPermissions: dictationPermissions)
@@ -183,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.aiKeyStore = aiKeyStore
             self.aiController = aiController
-            self.extensionStoreClient = extensionStoreClient
+            self.extensionStoreCatalog = extensionStoreCatalog
             self.extensionRegistry = extensionRegistry
             self.hyperKeyManager = hyperKeyManager
 
@@ -242,13 +243,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 AICommandsProvider { [weak self] destination in
                     self?.aiController?.show(destination)
                 },
+                ExtensionStoreCommandsProvider(),
                 ExtensionCommandsProvider(registry: extensionRegistry) { [weak self] installed, command in
                     self?.showExtension(installed: installed, command: command)
                 }
             ])
             self.registry = registry
 
-            let panel = LauncherPanel(keyEvents: keyEvents)
+            let panel = LauncherPanel(
+                keyEvents: keyEvents,
+                windowMode: settingsStore.settings.windowMode
+            )
             panel.onPositionChanged = { [weak self] position in
                 guard let store = self?.settingsStore else { return }
                 do {
@@ -264,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 frecencyStore: frecencyStore,
                 keyEvents: keyEvents,
                 toasts: toastCenter,
+                settingsStore: settingsStore,
                 webSearchBangs: webSearchBangs,
                 calculatorProvider: calculatorProvider,
                 presentingCommands: makeLauncherPresentingCommands(
@@ -277,6 +283,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     emojiPasteService: emojiPasteService,
                     colorHistoryStore: colorHistoryStore,
                     menuItemIndex: menuItemIndex,
+                    extensionStoreCatalog: extensionStoreCatalog,
+                    extensionRegistry: extensionRegistry,
+                    navigationCoordinator: navigationCoordinator,
+                    onExtensionRegistryChanged: { [weak self] in self?.refreshCommands() },
                     onHide: { [weak panel] returningFocus in
                         panel?.hide(returningFocus: returningFocus)
                     },
@@ -395,6 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.applyTheme(settings.theme)
                     self.appliedTheme = settings.theme
                 }
+                self.panel?.setWindowMode(settings.windowMode)
                 do {
                     if self.hotkeyManager?.isShortcutCaptureActive != true,
                        self.appliedHotkeySettings != settings.hotkey {
@@ -481,7 +492,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteService?.rememberFrontmostApplication()
         emojiPasteService?.rememberFrontmostApplication()
         menuItemIndex?.captureTargetApplication()
-        panel?.showNearTop(position: settingsStore?.settings.launcherPosition)
+        guard let panel, let settings = settingsStore?.settings else { return }
+        if panel.shouldResetNavigationOnShow(timeout: settings.popToRootTimeout) {
+            navigationCoordinator.reset()
+        }
+        panel.setWindowMode(settings.windowMode)
+        panel.showNearTop(position: settings.launcherPosition)
     }
 
     private func finishOnboarding() {
@@ -507,7 +523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let dictationEnableController,
             let speechKeyStore,
             let extensionRegistry,
-            let extensionStoreClient
+            let extensionStoreCatalog
         else { return }
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
@@ -521,7 +537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 dictationEnableController: dictationEnableController,
                 speechKeyStore: speechKeyStore,
                 extensionRegistry: extensionRegistry,
-                extensionStoreClient: extensionStoreClient,
+                extensionStoreCatalog: extensionStoreCatalog,
                 onRegistryChanged: { [weak self] in self?.refreshCommands() },
                 onHotkeyRecordingChanged: { [weak self] recording in
                     guard let self, let hotkey = self.settingsStore?.settings.hotkey else { return }

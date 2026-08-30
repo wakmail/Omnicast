@@ -88,4 +88,124 @@ final class LauncherPanelSnapTests: XCTestCase {
             )
         )
     }
+
+    func testVerticalGuideMagnetizesPanelCenterIndependently() throws {
+        let panelFrame = CGRect(x: 387.5, y: 120, width: 680, height: 480)
+        let alignment = try XCTUnwrap(
+            launcherPanelGuideAlignment(
+                panelFrame: panelFrame,
+                screenVisibleFrames: [mainScreen]
+            )
+        )
+
+        XCTAssertEqual(alignment.verticalGuideX, 720)
+        XCTAssertNil(alignment.horizontalGuideY)
+        XCTAssertEqual(alignment.magnetizedFrame.origin.x, 380)
+        XCTAssertEqual(alignment.magnetizedFrame.origin.y, panelFrame.origin.y)
+    }
+
+    func testHorizontalGuideMagnetizesPanelTopIndependently() throws {
+        let panelFrame = CGRect(x: 80, y: 337.5, width: 680, height: 480)
+        let alignment = try XCTUnwrap(
+            launcherPanelGuideAlignment(
+                panelFrame: panelFrame,
+                screenVisibleFrames: [mainScreen]
+            )
+        )
+
+        XCTAssertNil(alignment.verticalGuideX)
+        XCTAssertEqual(alignment.horizontalGuideY, 810)
+        XCTAssertEqual(alignment.magnetizedFrame.origin.x, panelFrame.origin.x)
+        XCTAssertEqual(alignment.magnetizedFrame.origin.y, 330)
+    }
+
+    func testGuidesActivateAtEightPointBoundary() throws {
+        let defaultFrame = launcherPanelDefaultFrame(
+            panelSize: panelSize,
+            screenVisibleFrame: mainScreen
+        )
+        let alignment = try XCTUnwrap(
+            launcherPanelGuideAlignment(
+                panelFrame: defaultFrame.offsetBy(dx: -8, dy: 8),
+                screenVisibleFrames: [mainScreen]
+            )
+        )
+
+        XCTAssertEqual(alignment.verticalGuideX, mainScreen.midX)
+        XCTAssertEqual(alignment.horizontalGuideY, defaultFrame.maxY)
+        XCTAssertEqual(alignment.magnetizedFrame, defaultFrame)
+    }
+
+    func testGuidesDoNotActivateBeyondEightPoints() throws {
+        let defaultFrame = launcherPanelDefaultFrame(
+            panelSize: panelSize,
+            screenVisibleFrame: mainScreen
+        )
+        let panelFrame = defaultFrame.offsetBy(dx: 8.01, dy: -8.01)
+        let alignment = try XCTUnwrap(
+            launcherPanelGuideAlignment(
+                panelFrame: panelFrame,
+                screenVisibleFrames: [mainScreen]
+            )
+        )
+
+        XCTAssertFalse(alignment.hasActiveGuide)
+        XCTAssertEqual(alignment.magnetizedFrame, panelFrame)
+    }
+
+    func testGuideCoordinatesRespectNegativeScreenOrigin() throws {
+        let leftScreen = CGRect(x: -1_920, y: -120, width: 1_920, height: 1_080)
+        let defaultFrame = launcherPanelDefaultFrame(
+            panelSize: panelSize,
+            screenVisibleFrame: leftScreen
+        )
+        let alignment = try XCTUnwrap(
+            launcherPanelGuideAlignment(
+                panelFrame: defaultFrame.offsetBy(dx: 6, dy: -7),
+                screenVisibleFrames: [mainScreen, leftScreen]
+            )
+        )
+
+        XCTAssertEqual(alignment.screenVisibleFrame, leftScreen)
+        XCTAssertEqual(alignment.verticalGuideX, -960)
+        XCTAssertEqual(alignment.horizontalGuideY, 870)
+        XCTAssertEqual(alignment.magnetizedFrame, defaultFrame)
+    }
+
+    func testGuideCoordinatesRespectScreenAboveMainDisplay() throws {
+        let upperScreen = CGRect(x: 240, y: 900, width: 1_280, height: 800)
+        let defaultFrame = launcherPanelDefaultFrame(
+            panelSize: panelSize,
+            screenVisibleFrame: upperScreen
+        )
+        let alignment = try XCTUnwrap(
+            launcherPanelGuideAlignment(
+                panelFrame: defaultFrame.offsetBy(dx: -4, dy: 3),
+                screenVisibleFrames: [mainScreen, upperScreen]
+            )
+        )
+
+        XCTAssertEqual(alignment.screenVisibleFrame, upperScreen)
+        XCTAssertEqual(alignment.verticalGuideX, 880)
+        XCTAssertEqual(alignment.horizontalGuideY, 1_610)
+        XCTAssertEqual(alignment.magnetizedFrame, defaultFrame)
+    }
+
+    func testGuideAlignmentRequiresScreenAndValidActivationDistance() {
+        let panelFrame = CGRect(origin: .zero, size: panelSize)
+
+        XCTAssertNil(
+            launcherPanelGuideAlignment(
+                panelFrame: panelFrame,
+                screenVisibleFrames: []
+            )
+        )
+        XCTAssertNil(
+            launcherPanelGuideAlignment(
+                panelFrame: panelFrame,
+                screenVisibleFrames: [mainScreen],
+                activationDistance: -1
+            )
+        )
+    }
 }

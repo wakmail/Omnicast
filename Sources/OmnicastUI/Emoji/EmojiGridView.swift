@@ -72,8 +72,12 @@ public struct EmojiGridView: View {
                         .foregroundStyle(secondaryText)
                 }
                 Spacer()
-                Text("Arrow keys move   Enter pastes")
+                Text("Arrow keys move")
                     .foregroundStyle(secondaryText)
+                FooterActionButton("Paste", keys: ["Enter"]) {
+                    model.pasteSelected()
+                }
+                .disabled(model.selectedEmoji == nil)
             }
             .font(LauncherTheme.Typography.footerTitle)
             .padding(.horizontal, LauncherTheme.Metrics.footerHorizontalPadding)

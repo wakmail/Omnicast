@@ -14,6 +14,7 @@ public final class RaycastImportViewModel: ObservableObject {
     @Published public private(set) var isImporting = false
     @Published public private(set) var result: RaycastImportResult?
     @Published public private(set) var errorMessage: String?
+    @Published public private(set) var importFailureMessage: String?
 
     private let reader: RayconfigReader
     private let importer: RaycastImporter
@@ -26,6 +27,10 @@ public final class RaycastImportViewModel: ObservableObject {
         self.reader = reader
         self.importer = importer
         self.fileURL = fileURL
+    }
+
+    public var canRunImport: Bool {
+        fileURL != nil && !selectedCategories.isEmpty && !isImporting
     }
 
     public func chooseFile() {
@@ -67,6 +72,7 @@ public final class RaycastImportViewModel: ObservableObject {
         }
         result = nil
         errorMessage = nil
+        importFailureMessage = nil
     }
 
     public func setSelected(_ category: RaycastImportCategory, selected: Bool) {
@@ -78,8 +84,13 @@ public final class RaycastImportViewModel: ObservableObject {
     }
 
     public func runImport() {
+        guard !isImporting else { return }
         guard let fileURL else {
             errorMessage = "Choose a Raycast backup first."
+            return
+        }
+        guard !selectedCategories.isEmpty else {
+            errorMessage = "Choose at least one category."
             return
         }
         let password = password
@@ -88,17 +99,24 @@ public final class RaycastImportViewModel: ObservableObject {
         isImporting = true
         result = nil
         errorMessage = nil
+        importFailureMessage = nil
         Task {
+            await Task.yield()
             do {
                 let backup = try await Task.detached {
                     try reader.read(from: fileURL, password: password.isEmpty ? nil : password)
                 }.value
                 result = try importer.run(backup: backup, selections: selections)
             } catch {
-                errorMessage = error.localizedDescription
+                importFailureMessage = error.localizedDescription
             }
             isImporting = false
         }
+    }
+
+    public func prepareToRetry() {
+        importFailureMessage = nil
+        errorMessage = nil
     }
 }
 
