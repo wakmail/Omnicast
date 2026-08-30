@@ -14,8 +14,11 @@ public enum RaycastImportPresentation {
     }
 
     @MainActor
-    public static func presentedView(importer: RaycastImporter) -> LauncherPresentedView {
-        let model = RaycastImportViewModel(importer: importer)
+    public static func presentedView(
+        importer: RaycastImporter,
+        fileURL: URL? = nil
+    ) -> LauncherPresentedView {
+        let model = RaycastImportViewModel(importer: importer, fileURL: fileURL)
         return LauncherPresentedView(
             title: "Import from Raycast",
             content: AnyView(ImportView(viewModel: model)),

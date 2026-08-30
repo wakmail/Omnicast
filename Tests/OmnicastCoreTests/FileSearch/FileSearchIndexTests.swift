@@ -51,4 +51,58 @@ final class FileSearchIndexTests: XCTestCase {
         XCTAssertEqual(results.map(\.displayName), ["Quarterly Report.txt"])
         XCTAssertEqual(results.first?.kind, .file)
     }
+
+    func testProtectedFolderScanReportsOnlyAccessDeniedRoots() async {
+        let downloads = URL(fileURLWithPath: "/Users/example/Downloads", isDirectory: true)
+        let desktop = URL(fileURLWithPath: "/Users/example/Desktop", isDirectory: true)
+        let documents = URL(fileURLWithPath: "/Users/example/Documents", isDirectory: true)
+        let fileManager = StubFileSearchManager(
+            contents: [desktop: [], documents: []],
+            errors: [
+                downloads: NSError(
+                    domain: NSCocoaErrorDomain,
+                    code: CocoaError.Code.fileReadNoPermission.rawValue
+                ),
+                documents: NSError(domain: NSCocoaErrorDomain, code: CocoaError.Code.fileNoSuchFile.rawValue)
+            ]
+        )
+
+        let scan = await FileSearchIndex.fallbackScan(
+            roots: [downloads, desktop, documents],
+            matching: "report",
+            fileManager: fileManager
+        )
+
+        XCTAssertEqual(scan.results, [])
+        XCTAssertEqual(scan.deniedRoots, [downloads])
+        XCTAssertEqual(fileManager.requestedRoots, Set([downloads, desktop, documents]))
+    }
+}
+
+private final class StubFileSearchManager: FileSearchFileManaging {
+    private let contents: [URL: [URL]]
+    private let errors: [URL: NSError]
+    private let lock = NSLock()
+    private var requested = Set<URL>()
+
+    init(contents: [URL: [URL]], errors: [URL: NSError]) {
+        self.contents = contents
+        self.errors = errors
+    }
+
+    var requestedRoots: Set<URL> {
+        lock.withLock { requested }
+    }
+
+    func contentsOfDirectory(
+        at url: URL,
+        includingPropertiesForKeys keys: [URLResourceKey]?,
+        options mask: FileManager.DirectoryEnumerationOptions
+    ) throws -> [URL] {
+        lock.withLock { _ = requested.insert(url) }
+        if let error = errors[url] {
+            throw error
+        }
+        return contents[url] ?? []
+    }
 }

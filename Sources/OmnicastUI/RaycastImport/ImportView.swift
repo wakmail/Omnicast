@@ -5,6 +5,7 @@ import SwiftUI
 
 public struct ImportView: View {
     @StateObject private var model: RaycastImportViewModel
+    @State private var isDropTargeted = false
 
     @MainActor
     public init(viewModel: RaycastImportViewModel) {
@@ -35,18 +36,46 @@ public struct ImportView: View {
     }
 
     private var filePicker: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Backup File")
-                    .font(.headline)
-                Text(model.fileURL?.path ?? "No file chosen")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+        Button(action: model.chooseFile) {
+            VStack(spacing: 8) {
+                Image(systemName: model.fileURL == nil ? "square.and.arrow.down" : "doc.fill")
+                    .font(.title2)
+                if let fileURL = model.fileURL {
+                    Text(fileURL.lastPathComponent)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text("Drop another backup or click to choose")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Drag your .rayconfig here")
+                        .font(.headline)
+                    Text("or click to choose from Downloads")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Spacer()
-            Button("Choose File", action: model.chooseFile)
+            .frame(maxWidth: .infinity, minHeight: 116)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .background(
+            isDropTargeted ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(
+                    isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.45),
+                    style: StrokeStyle(lineWidth: isDropTargeted ? 2 : 1, dash: [6])
+                )
+        }
+        .onDrop(
+            of: RayconfigDropReceiver.typeIdentifiers,
+            isTargeted: $isDropTargeted,
+            perform: model.acceptDrop
+        )
+        .accessibilityLabel(model.fileURL == nil ? "Choose Raycast backup" : "Change Raycast backup")
     }
 
     private var categoryPicker: some View {
