@@ -14,8 +14,17 @@ let package = Package(
         .library(name: "OmnicastExtensions", targets: ["OmnicastExtensions"]),
         .executable(name: "Omnicast", targets: ["Omnicast"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/soulverteam/SoulverCore", from: "3.4.0")
+    ],
     targets: [
-        .target(name: "OmnicastCore"),
+        .target(
+            name: "OmnicastCore",
+            dependencies: [
+                .product(name: "SoulverCore", package: "SoulverCore")
+            ],
+            resources: [.process("Emoji/Resources")]
+        ),
         .target(
             name: "OmnicastUI",
             dependencies: ["OmnicastCore"]
