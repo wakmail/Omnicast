@@ -156,7 +156,7 @@ public final class RaycastStoreClient: RaycastStoreServing, @unchecked Sendable 
         offset: Int = 0
     ) async throws -> RaycastStoreSearchResults {
         var components = URLComponents(
-            url: endpoint("extensions/search"),
+            url: endpoint("extensions/catalog"),
             resolvingAgainstBaseURL: false
         )!
         var items = [

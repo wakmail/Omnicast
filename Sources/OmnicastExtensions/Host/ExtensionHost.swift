@@ -21,8 +21,18 @@ public enum ExtensionHostError: LocalizedError {
     }
 }
 
+public struct ExtensionConsoleMessage: Equatable, Sendable {
+    public let level: String
+    public let message: String
+
+    public init(level: String, message: String) {
+        self.level = level
+        self.message = message
+    }
+}
+
 @MainActor
-public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     public let installedExtension: InstalledExtension
     public let command: ExtensionCommandManifest
 
@@ -30,7 +40,11 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
     private let persistence: ExtensionPersistence
     private let callbacks: ExtensionHostCallbacks
     private let router: ExtensionBridgeRouter
+    private let nodeBridge = ExtensionNodeBridge()
     private weak var webView: WKWebView?
+
+    public private(set) var consoleMessages: [ExtensionConsoleMessage] = []
+    public private(set) var renderedItemCount = 0
 
     public init(
         installedExtension: InstalledExtension,
@@ -78,11 +92,13 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
     public func makeWebView() -> WKWebView {
         let controller = WKUserContentController()
         controller.add(self, name: "omnicast")
+        controller.add(self, name: "log")
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = controller
         configuration.websiteDataStore = .nonPersistent()
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         self.webView = webView
 
@@ -98,12 +114,19 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         webView?.configuration.userContentController.removeScriptMessageHandler(
             forName: "omnicast"
         )
+        webView?.configuration.userContentController.removeScriptMessageHandler(
+            forName: "log"
+        )
     }
 
     public func userContentController(
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
+        if message.name == "log" {
+            captureLog(message.body)
+            return
+        }
         guard message.name == "omnicast",
               JSONSerialization.isValidJSONObject(message.body),
               let data = try? JSONSerialization.data(withJSONObject: message.body),
@@ -115,6 +138,20 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             let response = await self.router.route(request)
             self.deliver(response)
         }
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (String?) -> Void
+    ) {
+        guard prompt == "omnicast.sync" else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(nodeBridge.synchronousResponse(for: defaultText))
     }
 
     public func webView(
@@ -157,6 +194,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
     private func makeScripts() async throws -> [String] {
         let react = try resource(named: "react.production.min", extension: "js")
         let reactDOM = try resource(named: "react-dom.production.min", extension: "js")
+        let nodeShim = try resource(named: "NodeShim", extension: "js")
         let shim = try resource(named: "RaycastShim", extension: "js")
         let storedPreferences = try await persistence.preferences(
             extensionSlug: installedExtension.slug
@@ -169,6 +207,13 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             at: supportURL,
             withIntermediateDirectories: true
         )
+        #if arch(arm64)
+        let architecture = "arm64"
+        #elseif arch(x86_64)
+        let architecture = "x64"
+        #else
+        let architecture = "unknown"
+        #endif
         let context: JSONValue = .object([
             "preferences": .object(preferences),
             "environment": .object([
@@ -178,6 +223,14 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
                 "assetsPath": .string(
                     installedExtension.directoryURL
                         .appendingPathComponent("assets", isDirectory: true).path
+                ),
+                "extensionPath": .string(installedExtension.directoryURL.path),
+                "homePath": .string(NSHomeDirectory()),
+                "temporaryPath": .string(FileManager.default.temporaryDirectory.path),
+                "hostName": .string(ProcessInfo.processInfo.hostName),
+                "architecture": .string(architecture),
+                "processEnv": .object(
+                    ProcessInfo.processInfo.environment.mapValues(JSONValue.string)
                 ),
                 "supportPath": .string(supportURL.path),
                 "ownerOrAuthorName": .string(
@@ -193,7 +246,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
             .appendingPathComponent("\(command.name).js")
         let bundle = try String(contentsOf: bundleURL, encoding: .utf8)
         let boot = try bootScript(bundle: bundle)
-        return [react, reactDOM, contextScript, shim, boot]
+        return [react, reactDOM, contextScript, nodeShim, shim, boot]
     }
 
     private func resolvedPreferences(
@@ -241,7 +294,8 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
               };
             }
             if(name==="@raycast/api")return globalThis.__raycastAPI;
-            throw new Error("Module "+name+" is not yet supported");
+            if(globalThis.__omnicastModules&&name in globalThis.__omnicastModules)return globalThis.__omnicastModules[name];
+            throw new Error("Cannot require unknown module \""+name+"\"");
           }
           try{
             var module={exports:{}};
@@ -259,6 +313,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
           }catch(error){
             var message=error&&error.stack?error.stack:String(error);
             document.getElementById("root").textContent=message;
+            console.error(message);
             globalThis.webkit.messageHandlers.omnicast.postMessage({id:"boot",operation:"toast",payload:{message:String(error&&error.message?error.message:error)}});
           }
         })();
@@ -284,6 +339,22 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         webView?.evaluateJavaScript("globalThis.__omnicastReceive(\(literal));")
     }
 
+    private func captureLog(_ body: Any) {
+        guard let value = body as? [String: Any],
+              let type = value["type"] as? String else {
+            return
+        }
+        if type == "rendered", let count = value["count"] as? NSNumber {
+            renderedItemCount = count.intValue
+            return
+        }
+        if type == "console",
+           let level = value["level"] as? String,
+           let message = value["message"] as? String {
+            consoleMessages.append(ExtensionConsoleMessage(level: level, message: message))
+        }
+    }
+
     private static let html = """
     <!doctype html>
     <html>
@@ -291,19 +362,33 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
-        :root { color-scheme: dark; font: 13px system-ui; background: transparent; color: #f5f5f5; }
+        :root { color-scheme: dark; font: 13px system-ui; background: transparent; color: rgba(255,255,255,.92); }
         * { box-sizing: border-box; }
         html, body, #root { width: 100%; height: 100%; margin: 0; }
-        body { background: #171717; }
-        input { width: 100%; padding: 12px; border: 0; border-bottom: 1px solid #333; background: #202020; color: inherit; outline: none; }
-        .raycastListBody, .raycastDetail { padding: 8px; }
-        .raycastSection h3 { margin: 12px 8px 6px; color: #999; font-size: 11px; text-transform: uppercase; }
-        .raycastListItem { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border-radius: 8px; }
-        .raycastListItem:hover { background: #2b2b2b; }
+        body { overflow: hidden; background: rgba(7,9,13,.92); }
+        .raycastList { height: 100%; }
+        .raycastSearch { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
+        .raycastSearch input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; outline: none; font: 20px system-ui; }
+        .raycastSearch input::placeholder { color: rgba(255,255,255,.5); }
+        .raycastDropdown { border: 1px solid rgba(255,255,255,.08); border-radius: 6px; background: rgba(255,255,255,.08); color: inherit; padding: 5px 8px; }
+        .raycastLoading { color: rgba(255,255,255,.74); }
+        .raycastListBody { height: calc(100% - 56px); overflow: auto; padding: 6px; }
+        .raycastDetail { height: 100%; overflow: auto; padding: 16px; }
+        .raycastSection h3 { display: flex; justify-content: space-between; margin: 8px 10px 4px; color: rgba(255,255,255,.74); font-size: 11px; font-weight: 600; }
+        .raycastSection h3 small { font-weight: 400; }
+        .raycastListItem { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 8px 10px; border-radius: 8px; }
+        .raycastListItem:hover, .raycastListItem.selected { background: rgba(255,255,255,.10); }
+        .raycastIcon { display: grid; width: 24px; height: 24px; place-items: center; color: rgb(78,162,255); }
         .raycastListText { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-        .raycastListText small { color: #999; }
-        .raycastActions { display: flex; gap: 6px; }
-        .raycastAction { border: 0; border-radius: 6px; background: #3b3b3b; color: inherit; padding: 5px 8px; }
+        .raycastListText strong { overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+        .raycastListText small, .raycastAccessories { color: rgba(255,255,255,.74); }
+        .raycastAccessories { display: flex; gap: 18px; }
+        .raycastActions { display: none; position: fixed; z-index: 10; right: 14px; bottom: 14px; flex-direction: column; gap: 4px; width: 210px; padding: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(24,24,28,.96); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
+        .actionPanelOpen .raycastListItem.selected > .raycastActions { display: flex; }
+        .raycastAction { display: flex; justify-content: space-between; border: 0; border-radius: 6px; background: transparent; color: inherit; padding: 7px 8px; text-align: left; }
+        .raycastAction:hover, .raycastAction:focus { background: rgba(255,255,255,.10); outline: none; }
+        .raycastAction kbd { color: rgba(255,255,255,.74); }
+        .raycastEmpty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px; color: rgba(255,255,255,.74); }
         .raycastMarkdown { white-space: pre-wrap; line-height: 1.5; }
       </style>
     </head>

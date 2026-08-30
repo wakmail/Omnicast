@@ -15,7 +15,7 @@ final class RaycastStoreClientTests: XCTestCase {
             let path = try XCTUnwrap(request.url?.path)
             let body: Data
             switch path {
-            case "/extensions/search":
+            case "/extensions/catalog":
                 let components = try XCTUnwrap(URLComponents(
                     url: try XCTUnwrap(request.url),
                     resolvingAgainstBaseURL: false

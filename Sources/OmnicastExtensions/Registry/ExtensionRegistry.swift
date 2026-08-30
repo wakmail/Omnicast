@@ -124,9 +124,9 @@ public actor ExtensionRegistry {
         return InstalledExtension(slug: slug, directoryURL: directoryURL, manifest: manifest)
     }
 
-    public func install(storeSlug slug: String) async throws -> InstalledExtension {
-        try validate(slug: slug)
-        let bundle = try await store.downloadBundle(for: slug)
+    public func install(name: String) async throws -> InstalledExtension {
+        try validate(slug: name)
+        let bundle = try await store.downloadBundle(for: name)
         guard bundle.type == "bundle" else {
             throw RaycastStoreError.sourceArchiveUnsupported
         }
@@ -134,20 +134,47 @@ public actor ExtensionRegistry {
             at: extensionsDirectoryURL,
             withIntermediateDirectories: true
         )
+        let archiveURL = extensionsDirectoryURL.appendingPathComponent(
+            ".download.\(UUID().uuidString).tar.gz"
+        )
+        defer { try? fileManager.removeItem(at: archiveURL) }
+        try bundle.data.write(to: archiveURL, options: .atomic)
+        return try installArchive(at: archiveURL, preferredSlug: name)
+    }
+
+    public func install(storeSlug slug: String) async throws -> InstalledExtension {
+        try await install(name: slug)
+    }
+
+    public func install(fromArchive archiveURL: URL) throws -> InstalledExtension {
+        try fileManager.createDirectory(
+            at: extensionsDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        return try installArchive(at: archiveURL, preferredSlug: nil)
+    }
+
+    private func installArchive(
+        at archiveURL: URL,
+        preferredSlug: String?
+    ) throws -> InstalledExtension {
+        if let preferredSlug {
+            try validate(slug: preferredSlug)
+        }
 
         let transactionURL = extensionsDirectoryURL.appendingPathComponent(
             ".install.\(UUID().uuidString)",
             isDirectory: true
         )
-        let archiveURL = transactionURL.appendingPathComponent("extension.tar.gz")
         let extractedURL = transactionURL.appendingPathComponent("contents", isDirectory: true)
         try fileManager.createDirectory(at: transactionURL, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: transactionURL) }
 
-        try bundle.data.write(to: archiveURL, options: .atomic)
         try TarGzipExtractor.extract(archiveURL: archiveURL, destinationURL: extractedURL)
-        let sourceURL = try locateExtension(in: extractedURL, preferredSlug: slug)
+        let sourceURL = try locateExtension(in: extractedURL, preferredSlug: preferredSlug ?? "")
         let manifest = try validateBundle(at: sourceURL)
+        let slug = preferredSlug ?? manifest.name
+        try validate(slug: slug)
 
         let destinationURL = extensionsDirectoryURL.appendingPathComponent(slug, isDirectory: true)
         let backupURL = extensionsDirectoryURL.appendingPathComponent(
