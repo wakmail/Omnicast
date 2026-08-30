@@ -206,8 +206,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             commandContext = context
 
+            let raycastImportStore = try RaycastImportStore()
+            let raycastImporter = try RaycastImporter(
+                quicklinkStore: quicklinkStore,
+                snippetStore: snippetStore,
+                notesStore: notesStore,
+                settingsStore: settingsStore,
+                importStore: raycastImportStore
+            )
+
             let registry = CommandRegistry(providers: [
                 ApplicationsProvider(),
+                RaycastImportCommandProvider(),
                 SystemCommandsProvider(),
                 ResetWindowPositionProvider { [weak self] in
                     self?.resetWindowPosition()
@@ -269,7 +279,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     menuItemIndex: menuItemIndex,
                     onHide: { [weak panel] returningFocus in
                         panel?.hide(returningFocus: returningFocus)
-                    }
+                    },
+                    raycastImporter: raycastImporter
                 ),
                 navigationCoordinator: navigationCoordinator,
                 onHide: { [weak panel] returnFocus in
