@@ -13,16 +13,16 @@ final class ExtensionSettingsViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private let registry: ExtensionRegistry
-    private let client: RaycastStoreClient
+    private let catalog: RaycastStoreCatalog
     private let onRegistryChanged: () -> Void
 
     init(
         registry: ExtensionRegistry,
-        client: RaycastStoreClient,
+        catalog: RaycastStoreCatalog,
         onRegistryChanged: @escaping () -> Void
     ) {
         self.registry = registry
-        self.client = client
+        self.catalog = catalog
         self.onRegistryChanged = onRegistryChanged
     }
 
@@ -32,26 +32,25 @@ final class ExtensionSettingsViewModel: ObservableObject {
 
     func load() async {
         do {
-            installed = try await registry.listInstalled()
+            async let catalogValues = catalog.extensions()
+            async let installedValues = registry.listInstalled()
+            searchResults = try await catalogValues
+            installed = try await installedValues
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "The extension store is unavailable. Try again."
         }
     }
 
     func search() async {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else {
-            searchResults = []
-            return
-        }
         isWorking = true
         defer { isWorking = false }
         do {
-            searchResults = try await client.search(query: value).results
+            searchResults = try await catalog.search(query: value)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "The extension store is unavailable. Try again."
         }
     }
 
@@ -88,12 +87,12 @@ struct ExtensionSettingsView: View {
     @MainActor
     init(
         registry: ExtensionRegistry,
-        client: RaycastStoreClient,
+        catalog: RaycastStoreCatalog,
         onRegistryChanged: @escaping () -> Void
     ) {
         _model = StateObject(wrappedValue: ExtensionSettingsViewModel(
             registry: registry,
-            client: client,
+            catalog: catalog,
             onRegistryChanged: onRegistryChanged
         ))
     }
@@ -117,11 +116,14 @@ struct ExtensionSettingsView: View {
             }
 
             if let errorMessage = model.errorMessage {
-                Text(errorMessage)
-                    .font(LauncherTheme.Typography.footerTitle)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(LauncherTheme.Metrics.footerHorizontalPadding)
+                HStack {
+                    Text(errorMessage)
+                        .font(LauncherTheme.Typography.footerTitle)
+                        .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+                    Spacer()
+                    Button("Retry") { Task { await model.search() } }
+                }
+                .padding(LauncherTheme.Metrics.footerHorizontalPadding)
             }
         }
         .overlay {

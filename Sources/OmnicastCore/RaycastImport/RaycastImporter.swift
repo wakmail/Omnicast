@@ -61,29 +61,75 @@ public final class RaycastImporter {
         issues: inout [RaycastImportIssue]
     ) throws -> RaycastCategoryImportResult {
         let preferences = backup.preferencesPackage
-        let unsupported: [(String, Bool)] = [
-            ("Window mode", nonempty(preferences?.preferencesAppearance?.raycastPreferredWindowMode)),
-            ("Navigation style", nonempty(preferences?.preferencesAdvanced?.navigationCommandStyleIdentifierKey)),
-            ("Return timeout", preferences?.preferencesAdvanced?.popToRootTimeout != nil)
-        ]
+        let windowModeRaw = trimmed(
+            preferences?.preferencesAppearance?.raycastPreferredWindowMode
+        )
+        let navigationStyleRaw = trimmed(
+            preferences?.preferencesAdvanced?.navigationCommandStyleIdentifierKey
+        )
+        let timeoutRaw = preferences?.preferencesAdvanced?.popToRootTimeout
         let disabledKeys = disabledCommandKeys(in: backup)
-        let found = unsupported.filter(\.1).count + disabledKeys.count
+        let found = (windowModeRaw.isEmpty ? 0 : 1)
+            + (navigationStyleRaw.isEmpty ? 0 : 1)
+            + (timeoutRaw == nil ? 0 : 1)
+            + disabledKeys.count
         guard selections.contains(.settings) else {
             appendCategorySkip(.settings, count: found, issues: &issues)
             return categoryResult(.settings, selected: false, found: found, skipped: found)
         }
 
         var skipped = 0
-        for (item, exists) in unsupported where exists {
-            skipped += 1
+        var failed = 0
+        let windowMode = normalizeRaycastWindowMode(windowModeRaw)
+        let navigationStyle = normalizeRaycastNavigationStyle(navigationStyleRaw)
+        let timeout = timeoutRaw.flatMap { value in
+            value.isFinite && value >= 0 ? value : nil
+        }
+        if !windowModeRaw.isEmpty, windowMode == nil {
+            failed += 1
             issues.append(RaycastImportIssue(
                 category: .settings,
-                item: item,
-                reason: "The current Omnicast settings model has no matching field."
+                item: "Window mode",
+                reason: "The Raycast window mode is not recognized."
             ))
         }
-        let imported = try importStore.mergeDisabledCommandKeys(disabledKeys)
-        let duplicateCount = disabledKeys.count - imported
+        if !navigationStyleRaw.isEmpty, navigationStyle == nil {
+            failed += 1
+            issues.append(RaycastImportIssue(
+                category: .settings,
+                item: "Navigation style",
+                reason: "The Raycast navigation style is not recognized."
+            ))
+        }
+        if timeoutRaw != nil, timeout == nil {
+            failed += 1
+            issues.append(RaycastImportIssue(
+                category: .settings,
+                item: "Return timeout",
+                reason: "The Raycast return timeout is invalid."
+            ))
+        }
+
+        var importedSettings = 0
+        if windowMode != nil || navigationStyle != nil || timeout != nil {
+            try settingsStore.update { settings in
+                if let windowMode {
+                    settings.windowMode = windowMode
+                    importedSettings += 1
+                }
+                if let navigationStyle {
+                    settings.navigationStyle = navigationStyle
+                    importedSettings += 1
+                }
+                if let timeout {
+                    settings.popToRootTimeout = timeout
+                    importedSettings += 1
+                }
+            }
+        }
+
+        let importedDisabledKeys = try importStore.mergeDisabledCommandKeys(disabledKeys)
+        let duplicateCount = disabledKeys.count - importedDisabledKeys
         if duplicateCount > 0 {
             skipped += duplicateCount
             issues.append(RaycastImportIssue(
@@ -96,8 +142,9 @@ public final class RaycastImporter {
             .settings,
             selected: true,
             found: found,
-            imported: imported,
-            skipped: skipped
+            imported: importedSettings + importedDisabledKeys,
+            skipped: skipped,
+            failed: failed
         )
     }
 
@@ -520,10 +567,6 @@ public final class RaycastImporter {
         value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    private func nonempty(_ value: String?) -> Bool {
-        !trimmed(value).isEmpty
-    }
-
     private func appendCategorySkip(
         _ category: RaycastImportCategory,
         count: Int,
@@ -552,44 +595,6 @@ public final class RaycastImporter {
             imported: imported,
             skipped: skipped,
             failed: failed
-        )
-    }
-
-    private static let keyNames: [UInt32: String] = [
-        0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
-        11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T", 18: "1", 19: "2", 20: "3",
-        21: "4", 22: "6", 23: "5", 24: "Equals", 25: "9", 26: "7", 27: "Minus", 28: "8", 29: "0",
-        30: "Right Bracket", 31: "O", 32: "U", 33: "Left Bracket", 34: "I", 35: "P", 36: "Return",
-        37: "L", 38: "J", 39: "Quote", 40: "K", 41: "Semicolon", 42: "Backslash", 43: "Comma", 44: "Slash",
-        45: "N", 46: "M", 47: "Period", 48: "Tab", 49: "Space", 50: "Grave", 51: "Backspace",
-        53: "Escape", 71: "Clear", 76: "Enter", 96: "F5", 97: "F6", 98: "F7", 99: "F3", 100: "F8",
-        101: "F9", 103: "F11", 105: "F13", 106: "F16", 107: "F14", 109: "F10", 111: "F12",
-        113: "F15", 114: "Insert", 115: "Home", 116: "Page Up", 117: "Delete", 118: "F4", 119: "End",
-        120: "F2", 121: "Page Down", 122: "F1", 123: "Left", 124: "Right", 125: "Down", 126: "Up"
-    ]
-
-    private static func decodeHotkey(_ value: String) -> RaycastImportedCommandHotkey? {
-        let parts = value.split(separator: "-").map(String.init).filter { !$0.isEmpty }
-        guard let rawCode = parts.last, let keyCode = UInt32(rawCode), let keyName = keyNames[keyCode] else {
-            return nil
-        }
-        var modifiers: UInt32 = 0
-        var names: [String] = []
-        for rawModifier in parts.dropLast() {
-            switch rawModifier.lowercased() {
-            case "command", "cmd": modifiers |= 256; names.append("Command")
-            case "shift": modifiers |= 512; names.append("Shift")
-            case "option", "alt": modifiers |= 2_048; names.append("Option")
-            case "control", "ctrl": modifiers |= 4_096; names.append("Control")
-            case "fn", "function": names.append("Function")
-            default: continue
-            }
-        }
-        names.append(keyName)
-        return RaycastImportedCommandHotkey(
-            keyCode: keyCode,
-            modifiers: modifiers,
-            displayName: names.joined(separator: " ")
         )
     }
 }

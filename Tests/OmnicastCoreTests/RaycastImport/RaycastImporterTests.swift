@@ -30,6 +30,9 @@ final class RaycastImporterTests: XCTestCase {
         XCTAssertEqual(notes.notes.first?.title, "Project")
         XCTAssertEqual(notes.notes.first?.pinned, true)
         XCTAssertEqual(settings.settings.hotkey, .optionSpace)
+        XCTAssertEqual(settings.settings.windowMode, .compact)
+        XCTAssertEqual(settings.settings.navigationStyle, .macOS)
+        XCTAssertEqual(settings.settings.popToRootTimeout, 30)
         XCTAssertEqual(supplemental.data.scriptDirectories, ["/tmp/Raycast Scripts"])
         XCTAssertEqual(supplemental.data.commandHotkeys["system-emoji-picker"]?.displayName, "Command Space")
         XCTAssertEqual(Set(supplemental.data.disabledCommandKeys), Set(["raycastScript_/tmp/old.sh", "ext-github-stars"]))
@@ -42,8 +45,11 @@ final class RaycastImporterTests: XCTestCase {
         XCTAssertEqual(result.categories[.snippets]?.imported, 1)
         XCTAssertEqual(result.categories[.notes]?.imported, 1)
         XCTAssertEqual(result.categories[.extensionPreferences]?.imported, 1)
-        XCTAssertEqual(result.categories[.settings]?.imported, 2)
-        XCTAssertEqual(result.categories[.settings]?.skipped, 1)
+        XCTAssertEqual(result.categories[.settings]?.imported, 5)
+        XCTAssertEqual(result.categories[.settings]?.skipped, 0)
+        XCTAssertFalse(result.skippedItems.contains {
+            ["Window mode", "Navigation style", "Return timeout"].contains($0.item)
+        })
     }
 
     func testUnselectedCategoryDoesNotMutateItsStore() throws {
@@ -96,7 +102,11 @@ final class RaycastImporterTests: XCTestCase {
             ),
             preferencesPackage: RaycastPreferencesPackage(
                 preferencesGeneral: RaycastGeneralPreferences(raycastGlobalHotkey: "Option-49"),
-                preferencesAppearance: RaycastAppearancePreferences(raycastPreferredWindowMode: "compact")
+                preferencesAppearance: RaycastAppearancePreferences(raycastPreferredWindowMode: "compact"),
+                preferencesAdvanced: RaycastAdvancedPreferences(
+                    navigationCommandStyleIdentifierKey: "macos",
+                    popToRootTimeout: 30
+                )
             ),
             rootSearchPackage: RaycastRootSearchPackage(
                 rootSearch: [RaycastRootSearchRecord(key: "builtin_command_searchEmoji", hotkey: "Command-49")]

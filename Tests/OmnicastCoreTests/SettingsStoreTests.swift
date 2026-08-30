@@ -30,6 +30,9 @@ final class SettingsStoreTests: XCTestCase {
             settings.systemSpeechVoiceIdentifier = "com.apple.voice.compact.en-US.Samantha"
             settings.systemSpeechRate = 0.42
             settings.elevenLabsVoiceIdentifier = "customVoice"
+            settings.windowMode = .compact
+            settings.popToRootTimeout = 15
+            settings.navigationStyle = .macOS
         }
 
         let loaded = try SettingsStore(directoryURL: directory)
@@ -60,6 +63,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.settings.defaultAIProvider, .openAI)
         XCTAssertEqual(loaded.settings.speechEngine, .system)
         XCTAssertEqual(loaded.settings.systemSpeechRate, 0.5)
+        XCTAssertEqual(loaded.settings.windowMode, .standard)
+        XCTAssertEqual(loaded.settings.popToRootTimeout, 90)
+        XCTAssertEqual(loaded.settings.navigationStyle, .vim)
     }
 
     func testDecodesLegacyPresetHotkey() throws {

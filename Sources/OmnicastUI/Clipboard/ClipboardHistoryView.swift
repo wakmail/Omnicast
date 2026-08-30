@@ -181,10 +181,22 @@ public struct ClipboardHistoryView: View {
                     .foregroundStyle(secondaryText)
             }
             Spacer()
-            ClipboardFooterHint(label: "Paste", keys: ["Enter"])
-            ClipboardFooterHint(label: "Copy", keys: ["⌘", "Enter"])
-            ClipboardFooterHint(label: "Pin", keys: ["⌘", "P"])
-            ClipboardFooterHint(label: "Delete", keys: ["⌘", "⌫"])
+            FooterActionButton("Paste", keys: ["Enter"]) {
+                model.handle(.pasteSelected)
+            }
+            .disabled(model.selectedItem == nil)
+            FooterActionButton("Copy", keys: ["⌘", "Enter"]) {
+                model.handle(.copySelected)
+            }
+            .disabled(model.selectedItem == nil)
+            FooterActionButton("Pin", keys: ["⌘", "P"]) {
+                model.handle(.togglePinSelected)
+            }
+            .disabled(model.selectedItem == nil)
+            FooterActionButton("Delete", keys: ["⌘", "⌫"]) {
+                model.handle(.deleteSelected)
+            }
+            .disabled(model.selectedItem == nil)
         }
         .font(LauncherTheme.Typography.footerTitle)
         .padding(.horizontal, LauncherTheme.Metrics.footerHorizontalPadding)
@@ -311,22 +323,6 @@ private struct ClipboardStoredImageView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ContentUnavailableView("Image unavailable", systemImage: "photo.badge.exclamationmark")
-        }
-    }
-}
-
-private struct ClipboardFooterHint: View {
-    let label: String
-    let keys: [String]
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Text(label)
-                .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
-            ForEach(keys, id: \.self) { key in
-                ClipboardKeyCap(key, colorScheme: colorScheme)
-            }
         }
     }
 }

@@ -14,16 +14,17 @@ final class LauncherPanel: NSPanel {
     private var isDraggingPanel = false
     private var localMouseUpMonitor: Any?
     private var globalMouseUpMonitor: Any?
-    private let snapGuide = LauncherPanelSnapGuideWindow()
+    private let alignmentGuide = LauncherPanelAlignmentGuideWindow()
+    private(set) var hiddenAt: Date?
 
-    init(keyEvents: LauncherKeyEvents) {
+    init(keyEvents: LauncherKeyEvents, windowMode: LauncherWindowMode = .standard) {
         self.keyEvents = keyEvents
         super.init(
             contentRect: NSRect(
                 x: 0,
                 y: 0,
                 width: LauncherTheme.Metrics.panelWidth,
-                height: LauncherTheme.Metrics.panelHeight
+                height: LauncherTheme.Metrics.panelHeight(for: windowMode)
             ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -87,6 +88,7 @@ final class LauncherPanel: NSPanel {
 
         makeKeyAndOrderFront(nil)
         orderFrontRegardless()
+        hiddenAt = nil
     }
 
     func resetPosition() {
@@ -98,6 +100,7 @@ final class LauncherPanel: NSPanel {
 
     func hide(returningFocus: Bool) {
         cancelDrag()
+        hiddenAt = Date()
         orderOut(nil)
         if returningFocus {
             if let previousKeyWindow, previousKeyWindow.isVisible {
@@ -109,6 +112,22 @@ final class LauncherPanel: NSPanel {
         }
         previousKeyWindow = nil
         previousApplication = nil
+    }
+
+    func setWindowMode(_ windowMode: LauncherWindowMode) {
+        let newHeight = LauncherTheme.Metrics.panelHeight(for: windowMode)
+        guard frame.height != newHeight else { return }
+        var newFrame = frame
+        newFrame.origin.y += frame.height - newHeight
+        newFrame.size.height = newHeight
+        setFrame(newFrame, display: true, animate: isVisible)
+    }
+
+    func shouldResetNavigationOnShow(
+        timeout: TimeInterval,
+        now: Date = Date()
+    ) -> Bool {
+        shouldPopLauncherToRoot(hiddenAt: hiddenAt, shownAt: now, timeout: timeout)
     }
 
     override func resignKey() {
@@ -136,28 +155,37 @@ final class LauncherPanel: NSPanel {
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers.contains(.command), event.keyCode == 40 {
-            keyEvents.send(.actions)
+            if keyEvents.route(.actions) { return }
+            super.sendEvent(event)
             return
         }
         if modifiers.contains(.command), event.keyCode == 43 {
-            keyEvents.send(.settings)
+            if keyEvents.route(.settings) { return }
+            super.sendEvent(event)
             return
         }
         if modifiers.contains(.command), (event.keyCode == 36 || event.keyCode == 76) {
-            keyEvents.send(.commandEnter)
+            if keyEvents.route(.commandEnter) { return }
+            super.sendEvent(event)
             return
         }
 
+        let key: LauncherKey?
         switch event.keyCode {
         case 126:
-            keyEvents.send(.moveUp)
+            key = .moveUp
         case 125:
-            keyEvents.send(.moveDown)
+            key = .moveDown
         case 36, 76:
-            keyEvents.send(.enter)
+            key = .enter
         case 53:
-            keyEvents.send(.escape)
+            key = .escape
         default:
+            key = nil
+        }
+        if let key, keyEvents.route(key) {
+            return
+        } else {
             super.sendEvent(event)
         }
     }
@@ -196,14 +224,14 @@ final class LauncherPanel: NSPanel {
     private func windowWillMove(_ notification: Notification) {
         guard isVisible, !positioningProgrammatically, !isDraggingPanel else { return }
         isDraggingPanel = true
-        updateSnapGuide()
+        updateAlignmentGuides()
         installMouseUpMonitors()
     }
 
     @objc
     private func windowDidMove(_ notification: Notification) {
-        guard isDraggingPanel else { return }
-        updateSnapGuide()
+        guard isDraggingPanel, !positioningProgrammatically else { return }
+        updateAlignmentGuides()
     }
 
     private func installMouseUpMonitors() {
@@ -234,25 +262,29 @@ final class LauncherPanel: NSPanel {
         }
     }
 
-    private func updateSnapGuide() {
-        guard let target = launcherPanelNearestDefaultFrame(
+    private func updateAlignmentGuides() {
+        guard let alignment = launcherPanelGuideAlignment(
             panelFrame: frame,
             screenVisibleFrames: NSScreen.screens.map(\.visibleFrame)
         ) else {
-            snapGuide.orderOut(nil)
+            alignmentGuide.orderOut(nil)
             return
         }
 
-        snapGuide.setFrame(target, display: true)
-        snapGuide.level = level
-        snapGuide.order(.below, relativeTo: windowNumber)
+        if alignment.magnetizedFrame.origin != frame.origin {
+            positioningProgrammatically = true
+            setFrameOrigin(alignment.magnetizedFrame.origin)
+            positioningProgrammatically = false
+        }
+
+        alignmentGuide.show(alignment: alignment, above: level)
     }
 
     private func finishDrag() {
         guard isDraggingPanel else { return }
         isDraggingPanel = false
         removeMouseUpMonitors()
-        snapGuide.orderOut(nil)
+        alignmentGuide.orderOut(nil)
 
         if let target = launcherPanelSnapTarget(
             droppedFrame: frame,
@@ -276,11 +308,11 @@ final class LauncherPanel: NSPanel {
         guard isDraggingPanel else { return }
         isDraggingPanel = false
         removeMouseUpMonitors()
-        snapGuide.orderOut(nil)
+        alignmentGuide.orderOut(nil)
     }
 }
 
-private final class LauncherPanelSnapGuideWindow: NSWindow {
+private final class LauncherPanelAlignmentGuideWindow: NSWindow {
     init() {
         super.init(
             contentRect: .zero,
@@ -293,31 +325,70 @@ private final class LauncherPanelSnapGuideWindow: NSWindow {
         hasShadow = false
         ignoresMouseEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        contentView = LauncherPanelSnapGuideView()
+        contentView = LauncherPanelAlignmentGuideView()
+    }
+
+    func show(alignment: LauncherPanelGuideAlignment, above panelLevel: NSWindow.Level) {
+        guard alignment.hasActiveGuide,
+              let guideView = contentView as? LauncherPanelAlignmentGuideView
+        else {
+            orderOut(nil)
+            return
+        }
+
+        setFrame(alignment.screenVisibleFrame, display: true)
+        guideView.verticalGuideX = alignment.verticalGuideX.map {
+            $0 - alignment.screenVisibleFrame.minX
+        }
+        guideView.horizontalGuideY = alignment.horizontalGuideY.map {
+            $0 - alignment.screenVisibleFrame.minY
+        }
+        level = NSWindow.Level(rawValue: panelLevel.rawValue + 1)
+        orderFrontRegardless()
     }
 }
 
-private final class LauncherPanelSnapGuideView: NSView {
+private final class LauncherPanelAlignmentGuideView: NSView {
+    var verticalGuideX: CGFloat? {
+        didSet { needsDisplay = true }
+    }
+    var horizontalGuideY: CGFloat? {
+        didSet { needsDisplay = true }
+    }
+
     override var isOpaque: Bool { false }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let lineWidth: CGFloat = 2
-        let outline = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: lineWidth / 2, dy: lineWidth / 2),
-            xRadius: LauncherTheme.Metrics.panelCornerRadius,
-            yRadius: LauncherTheme.Metrics.panelCornerRadius
-        )
-        outline.lineWidth = lineWidth
-        outline.lineCapStyle = .round
-        outline.setLineDash([1, 5], count: 2, phase: 0)
-        NSColor.secondaryLabelColor.setStroke()
-        outline.stroke()
+        NSColor.secondaryLabelColor.withAlphaComponent(0.5).setStroke()
+
+        if let verticalGuideX {
+            strokeGuide(
+                from: NSPoint(x: verticalGuideX, y: bounds.minY),
+                to: NSPoint(x: verticalGuideX, y: bounds.maxY)
+            )
+        }
+        if let horizontalGuideY {
+            strokeGuide(
+                from: NSPoint(x: bounds.minX, y: horizontalGuideY),
+                to: NSPoint(x: bounds.maxX, y: horizontalGuideY)
+            )
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
+    }
+
+    private func strokeGuide(from start: NSPoint, to end: NSPoint) {
+        let guide = NSBezierPath()
+        guide.move(to: start)
+        guide.line(to: end)
+        guide.lineWidth = 1
+        guide.lineCapStyle = .round
+        guide.setLineDash([1, 3], count: 2, phase: 0)
+        guide.stroke()
     }
 }

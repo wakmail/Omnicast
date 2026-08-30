@@ -10,6 +10,34 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case dark = "Dark"
 }
 
+public enum LauncherWindowMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case standard
+    case compact
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .standard: "Standard"
+        case .compact: "Compact"
+        }
+    }
+}
+
+public enum LauncherNavigationStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case vim
+    case macOS = "macos"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .vim: "Vim"
+        case .macOS: "macOS"
+        }
+    }
+}
+
 public enum SpeechEngineChoice: String, Codable, CaseIterable, Identifiable, Sendable {
     case system
     case elevenLabs
@@ -113,6 +141,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var systemSpeechVoiceIdentifier: String
     public var systemSpeechRate: Double
     public var elevenLabsVoiceIdentifier: String
+    public var windowMode: LauncherWindowMode
+    public var popToRootTimeout: Double
+    public var navigationStyle: LauncherNavigationStyle
 
     public init(
         hotkey: HotkeySettings = .optionSpace,
@@ -130,7 +161,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
         speechEngine: SpeechEngineChoice = .system,
         systemSpeechVoiceIdentifier: String = "",
         systemSpeechRate: Double = 0.5,
-        elevenLabsVoiceIdentifier: String = "21m00Tcm4TlvDq8ikWAM"
+        elevenLabsVoiceIdentifier: String = "21m00Tcm4TlvDq8ikWAM",
+        windowMode: LauncherWindowMode = .standard,
+        popToRootTimeout: Double = 90,
+        navigationStyle: LauncherNavigationStyle = .vim
     ) {
         self.hotkey = hotkey
         self.theme = theme
@@ -148,6 +182,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.systemSpeechVoiceIdentifier = systemSpeechVoiceIdentifier
         self.systemSpeechRate = systemSpeechRate
         self.elevenLabsVoiceIdentifier = elevenLabsVoiceIdentifier
+        self.windowMode = windowMode
+        self.popToRootTimeout = popToRootTimeout
+        self.navigationStyle = navigationStyle
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -167,6 +204,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case systemSpeechVoiceIdentifier
         case systemSpeechRate
         case elevenLabsVoiceIdentifier
+        case windowMode
+        case popToRootTimeout
+        case navigationStyle
     }
 
     public init(from decoder: any Decoder) throws {
@@ -214,6 +254,18 @@ public struct AppSettings: Codable, Equatable, Sendable {
             String.self,
             forKey: .elevenLabsVoiceIdentifier
         ) ?? "21m00Tcm4TlvDq8ikWAM"
+        windowMode = try values.decodeIfPresent(
+            LauncherWindowMode.self,
+            forKey: .windowMode
+        ) ?? .standard
+        popToRootTimeout = try values.decodeIfPresent(
+            Double.self,
+            forKey: .popToRootTimeout
+        ) ?? 90
+        navigationStyle = try values.decodeIfPresent(
+            LauncherNavigationStyle.self,
+            forKey: .navigationStyle
+        ) ?? .vim
     }
 }
 

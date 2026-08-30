@@ -1,10 +1,13 @@
 import AppKit
+import OmnicastCore
 import SwiftUI
 
 public enum LauncherTheme {
     public enum Metrics {
         public static let panelWidth: CGFloat = 750
         public static let panelHeight: CGFloat = 480
+        public static let compactResultRowCount = 5
+        public static let compactPanelHeight: CGFloat = 330
         public static let panelCornerRadius: CGFloat = 12
         public static let borderWidth: CGFloat = 1
 
@@ -46,6 +49,13 @@ public enum LauncherTheme {
         public static let actionPanelPadding: CGFloat = 12
         public static let actionPanelWidth: CGFloat = 210
         public static let symbolIconPadding: CGFloat = 4
+
+        public static func panelHeight(for windowMode: LauncherWindowMode) -> CGFloat {
+            switch windowMode {
+            case .standard: panelHeight
+            case .compact: compactPanelHeight
+            }
+        }
     }
 
     public enum Typography {

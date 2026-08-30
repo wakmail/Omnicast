@@ -17,21 +17,30 @@ public struct ImportView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Import from Raycast")
                     .font(.title2.bold())
-                filePicker
-                SecureField("Backup Password", text: $model.password)
-                    .textFieldStyle(.roundedBorder)
-                categoryPicker
-                importButton
-                if let errorMessage = model.errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
-                }
                 if let result = model.result {
                     resultSummary(result)
+                } else if let failure = model.importFailureMessage {
+                    failureSummary(failure)
+                } else {
+                    importForm
                 }
             }
             .padding(24)
             .frame(maxWidth: 620, alignment: .leading)
+        }
+    }
+
+    private var importForm: some View {
+        Group {
+            filePicker
+            SecureField("Backup Password", text: $model.password)
+                .textFieldStyle(.roundedBorder)
+            categoryPicker
+            importButton
+            if let errorMessage = model.errorMessage {
+                Text(errorMessage)
+                    .foregroundStyle(.red)
+            }
         }
     }
 
@@ -106,7 +115,7 @@ public struct ImportView: View {
             }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(model.fileURL == nil || model.selectedCategories.isEmpty || model.isImporting)
+        .disabled(!model.canRunImport)
     }
 
     private func resultSummary(_ result: RaycastImportResult) -> some View {
@@ -145,6 +154,20 @@ public struct ImportView: View {
                     }
                 }
             }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func failureSummary(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Import Failed", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.red)
+            Text(message)
+                .foregroundStyle(.secondary)
+            Button("Try Again", action: model.prepareToRetry)
+                .buttonStyle(.borderedProminent)
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))

@@ -27,6 +27,8 @@ final class RaycastStoreClientTests: XCTestCase {
                 body = Data(Self.searchResponse.utf8)
             case "/extensions/gitlab":
                 body = Data(Self.metadataResponse.utf8)
+            case "/extensions/gitlab/screenshots":
+                body = Data("[\"https://store.example/screenshot.png\"]".utf8)
             case "/extensions/gitlab/bundle":
                 body = Data("""
                 {"url":"https://downloads.example/gitlab.tar.gz","type":"bundle"}
@@ -49,12 +51,18 @@ final class RaycastStoreClientTests: XCTestCase {
 
         let search = try await client.search(query: "gitlab")
         let metadata = try await client.metadata(for: "gitlab")
+        let screenshots = try await client.screenshots(for: "gitlab")
         let bundle = try await client.downloadBundle(for: "gitlab")
 
         XCTAssertEqual(search.total, 1)
         XCTAssertEqual(search.results.first?.installCount, 42)
         XCTAssertEqual(metadata.title, "GitLab")
         XCTAssertEqual(metadata.commands.first?.name, "search-projects")
+        XCTAssertEqual(
+            metadata.screenshotURLs.map(\.absoluteString),
+            ["https://store.example/catalog-screenshot.png"]
+        )
+        XCTAssertEqual(screenshots.map(\.absoluteString), ["https://store.example/screenshot.png"])
         XCTAssertEqual(bundle.data, Data([0x1f, 0x8b, 0x08]))
         XCTAssertEqual(bundle.type, "bundle")
     }
@@ -66,6 +74,7 @@ final class RaycastStoreClientTests: XCTestCase {
       "description": "Manage GitLab",
       "author": "tonka3000",
       "icon_url": "https://store.example/icon.png",
+      "screenshot_urls": ["https://store.example/catalog-screenshot.png"],
       "categories": ["Developer Tools"],
       "platforms": ["macOS"],
       "commands": [

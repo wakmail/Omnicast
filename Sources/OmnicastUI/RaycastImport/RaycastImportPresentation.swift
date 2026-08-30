@@ -23,7 +23,12 @@ public enum RaycastImportPresentation {
             title: "Import from Raycast",
             content: AnyView(ImportView(viewModel: model)),
             showsSearchField: false,
-            initialQuery: ""
+            initialQuery: "",
+            onKey: { [weak model] key in
+                guard key == .enter, model?.canRunImport == true else { return false }
+                model?.runImport()
+                return true
+            }
         )
     }
 }
