@@ -12,6 +12,7 @@ final class LauncherViewModel: ObservableObject {
     }
     @Published private(set) var results: [RankedCommand] = []
     @Published var selectedIndex = 0
+    var selectionCameFromKeyboard = true
     @Published var actionPanelVisible = false
     @Published private(set) var isLoading = true
     @Published private(set) var navigationDepth = 0
@@ -336,6 +337,7 @@ final class LauncherViewModel: ObservableObject {
             frecency: frecencyStore.entries,
             bangs: webSearchBangs
         )
+        selectionCameFromKeyboard = true
         selectedIndex = min(selectedIndex, max(0, results.count - 1))
     }
 
@@ -375,8 +377,10 @@ final class LauncherViewModel: ObservableObject {
 
         switch key {
         case .moveUp:
+            selectionCameFromKeyboard = true
             selectedIndex = max(0, selectedIndex - 1)
         case .moveDown:
+            selectionCameFromKeyboard = true
             selectedIndex = min(max(0, results.count - 1), selectedIndex + 1)
         case .enter:
             executeSelected()

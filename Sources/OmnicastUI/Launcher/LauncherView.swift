@@ -142,6 +142,7 @@ public struct LauncherView: View {
                                 model.executeSelected()
                             }
                             .onHover { hovering in
+                                model.selectionCameFromKeyboard = false
                                 if hovering { model.select(index) }
                             }
                         }
@@ -150,8 +151,9 @@ public struct LauncherView: View {
             }
             .scrollIndicators(.hidden)
             .onChange(of: model.selectedIndex) {
+                guard model.selectionCameFromKeyboard else { return }
                 if let command = model.selectedCommand {
-                    proxy.scrollTo(command.id, anchor: .center)
+                    proxy.scrollTo(command.id)
                 }
             }
         }
