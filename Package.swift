@@ -11,6 +11,7 @@ let package = Package(
     products: [
         .library(name: "OmnicastCore", targets: ["OmnicastCore"]),
         .library(name: "OmnicastUI", targets: ["OmnicastUI"]),
+        .library(name: "OmnicastExtensions", targets: ["OmnicastExtensions"]),
         .executable(name: "Omnicast", targets: ["Omnicast"])
     ],
     targets: [
@@ -19,6 +20,11 @@ let package = Package(
             name: "OmnicastUI",
             dependencies: ["OmnicastCore"]
         ),
+        .target(
+            name: "OmnicastExtensions",
+            dependencies: ["OmnicastCore"],
+            resources: [.process("Resources")]
+        ),
         .executableTarget(
             name: "Omnicast",
             dependencies: ["OmnicastCore", "OmnicastUI"]
@@ -26,6 +32,11 @@ let package = Package(
         .testTarget(
             name: "OmnicastCoreTests",
             dependencies: ["OmnicastCore"]
+        ),
+        .testTarget(
+            name: "OmnicastExtensionsTests",
+            dependencies: ["OmnicastExtensions"],
+            resources: [.copy("Fixtures")]
         )
     ],
     swiftLanguageModes: [.v5]
