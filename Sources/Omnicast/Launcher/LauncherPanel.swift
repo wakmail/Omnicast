@@ -7,11 +7,14 @@ import OmnicastUI
 @MainActor
 final class LauncherPanel: NSPanel {
     let keyEvents: LauncherKeyEvents
-    var onPositionChanged: ((LauncherWindowPosition) -> Void)?
+    var onPositionChanged: ((LauncherWindowPosition?) -> Void)?
     private var previousApplication: NSRunningApplication?
     private weak var previousKeyWindow: NSWindow?
     private var positioningProgrammatically = false
-    private var positionSaveWorkItem: DispatchWorkItem?
+    private var isDraggingPanel = false
+    private var localMouseUpMonitor: Any?
+    private var globalMouseUpMonitor: Any?
+    private let snapGuide = LauncherPanelSnapGuideWindow()
 
     init(keyEvents: LauncherKeyEvents) {
         self.keyEvents = keyEvents
@@ -36,6 +39,26 @@ final class LauncherPanel: NSPanel {
         hidesOnDeactivate = false
         animationBehavior = .utilityWindow
         isMovableByWindowBackground = true
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillMove(_:)),
+            name: NSWindow.willMoveNotification,
+            object: self
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidMove(_:)),
+            name: NSWindow.didMoveNotification,
+            object: self
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        MainActor.assumeIsolated {
+            removeMouseUpMonitors()
+        }
     }
 
     override var canBecomeKey: Bool { true }
@@ -67,25 +90,14 @@ final class LauncherPanel: NSPanel {
     }
 
     func resetPosition() {
+        cancelDrag()
         positioningProgrammatically = true
         setDefaultPosition()
         positioningProgrammatically = false
     }
 
-    override func setFrameOrigin(_ point: NSPoint) {
-        super.setFrameOrigin(point)
-        if isVisible, !positioningProgrammatically {
-            positionSaveWorkItem?.cancel()
-            let position = LauncherWindowPosition(x: Double(point.x), y: Double(point.y))
-            let work = DispatchWorkItem { [weak self] in
-                self?.onPositionChanged?(position)
-            }
-            positionSaveWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
-        }
-    }
-
     func hide(returningFocus: Bool) {
+        cancelDrag()
         orderOut(nil)
         if returningFocus {
             if let previousKeyWindow, previousKeyWindow.isVisible {
@@ -109,6 +121,14 @@ final class LauncherPanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown,
+           event.clickCount == 2,
+           isPointInSearchBar(event.locationInWindow) {
+            resetPosition()
+            onPositionChanged?(nil)
+            return
+        }
+
         guard event.type == .keyDown else {
             super.sendEvent(event)
             return
@@ -144,11 +164,13 @@ final class LauncherPanel: NSPanel {
 
     private func setDefaultPosition() {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let visible = screen.visibleFrame
-        setFrameOrigin(NSPoint(
-            x: visible.midX - frame.width / 2,
-            y: visible.maxY - frame.height - min(90, visible.height * 0.12)
-        ))
+        setFrame(
+            launcherPanelDefaultFrame(
+                panelSize: frame.size,
+                screenVisibleFrame: screen.visibleFrame
+            ),
+            display: true
+        )
     }
 
     private func isPositionVisible(_ position: LauncherWindowPosition) -> Bool {
@@ -159,5 +181,143 @@ final class LauncherPanel: NSPanel {
             height: frame.height
         )
         return NSScreen.screens.contains { $0.visibleFrame.intersects(proposed) }
+    }
+
+    private func isPointInSearchBar(_ point: NSPoint) -> Bool {
+        NSRect(
+            x: 0,
+            y: frame.height - LauncherTheme.Metrics.searchHeight,
+            width: frame.width,
+            height: LauncherTheme.Metrics.searchHeight
+        ).contains(point)
+    }
+
+    @objc
+    private func windowWillMove(_ notification: Notification) {
+        guard isVisible, !positioningProgrammatically, !isDraggingPanel else { return }
+        isDraggingPanel = true
+        updateSnapGuide()
+        installMouseUpMonitors()
+    }
+
+    @objc
+    private func windowDidMove(_ notification: Notification) {
+        guard isDraggingPanel else { return }
+        updateSnapGuide()
+    }
+
+    private func installMouseUpMonitors() {
+        removeMouseUpMonitors()
+        localMouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) {
+            [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.finishDrag()
+            }
+            return event
+        }
+        globalMouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) {
+            [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.finishDrag()
+            }
+        }
+    }
+
+    private func removeMouseUpMonitors() {
+        if let localMouseUpMonitor {
+            NSEvent.removeMonitor(localMouseUpMonitor)
+            self.localMouseUpMonitor = nil
+        }
+        if let globalMouseUpMonitor {
+            NSEvent.removeMonitor(globalMouseUpMonitor)
+            self.globalMouseUpMonitor = nil
+        }
+    }
+
+    private func updateSnapGuide() {
+        guard let target = launcherPanelNearestDefaultFrame(
+            panelFrame: frame,
+            screenVisibleFrames: NSScreen.screens.map(\.visibleFrame)
+        ) else {
+            snapGuide.orderOut(nil)
+            return
+        }
+
+        snapGuide.setFrame(target, display: true)
+        snapGuide.level = level
+        snapGuide.order(.below, relativeTo: windowNumber)
+    }
+
+    private func finishDrag() {
+        guard isDraggingPanel else { return }
+        isDraggingPanel = false
+        removeMouseUpMonitors()
+        snapGuide.orderOut(nil)
+
+        if let target = launcherPanelSnapTarget(
+            droppedFrame: frame,
+            screenVisibleFrames: NSScreen.screens.map(\.visibleFrame)
+        ) {
+            positioningProgrammatically = true
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                animator().setFrame(target, display: true)
+            }
+            positioningProgrammatically = false
+            onPositionChanged?(nil)
+        } else {
+            onPositionChanged?(
+                LauncherWindowPosition(x: Double(frame.minX), y: Double(frame.minY))
+            )
+        }
+    }
+
+    private func cancelDrag() {
+        guard isDraggingPanel else { return }
+        isDraggingPanel = false
+        removeMouseUpMonitors()
+        snapGuide.orderOut(nil)
+    }
+}
+
+private final class LauncherPanelSnapGuideWindow: NSWindow {
+    init() {
+        super.init(
+            contentRect: .zero,
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        contentView = LauncherPanelSnapGuideView()
+    }
+}
+
+private final class LauncherPanelSnapGuideView: NSView {
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let lineWidth: CGFloat = 2
+        let outline = NSBezierPath(
+            roundedRect: bounds.insetBy(dx: lineWidth / 2, dy: lineWidth / 2),
+            xRadius: LauncherTheme.Metrics.panelCornerRadius,
+            yRadius: LauncherTheme.Metrics.panelCornerRadius
+        )
+        outline.lineWidth = lineWidth
+        outline.lineCapStyle = .round
+        outline.setLineDash([1, 5], count: 2, phase: 0)
+        NSColor.secondaryLabelColor.setStroke()
+        outline.stroke()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }

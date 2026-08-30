@@ -46,6 +46,10 @@ let package = Package(
             name: "OmnicastExtensionsTests",
             dependencies: ["OmnicastExtensions"],
             resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            name: "OmnicastTests",
+            dependencies: ["Omnicast"]
         )
     ],
     swiftLanguageModes: [.v5]

@@ -283,6 +283,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     raycastImporter: raycastImporter
                 ),
                 navigationCoordinator: navigationCoordinator,
+                onImportRayconfig: { [weak self] fileURL in
+                    self?.navigationCoordinator.push(
+                        RaycastImportPresentation.presentedView(
+                            importer: raycastImporter,
+                            fileURL: fileURL
+                        )
+                    )
+                },
                 onHide: { [weak panel] returnFocus in
                     panel?.hide(returningFocus: returnFocus)
                 },
