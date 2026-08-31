@@ -106,8 +106,9 @@ List.Item=function(props){
   var hidden=context.query&&!text.toLowerCase().includes(String(context.query).toLowerCase());
   var selected=context.selected===id;
   var icon=typeof props.icon==="string"?props.icon:(props.icon&&props.icon.source)||"";
+  var imageIcon=typeof icon==="string"&&/^(https?:|data:|file:)/i.test(icon);
   return React.createElement("article",{className:"raycastListItem"+(selected?" selected":""),style:hidden?{display:"none"}:null,"data-item-id":id,tabIndex:selected?0:-1,onMouseEnter:function(){context.select(id);},onClick:function(){context.select(id);if(props.onAction)runAction(props.onAction);}},
-    icon?React.createElement("span",{className:"raycastIcon"},typeof icon==="string"&&icon.length<5?icon:"◆"):null,
+    icon?React.createElement("span",{className:"raycastIcon"},imageIcon?React.createElement("img",{src:icon,alt:"",onError:function(event){console.error("Could not load image "+icon);event.currentTarget.style.display="none";}}):(typeof icon==="string"&&icon.length<5?icon:"◆")):null,
     React.createElement("div",{className:"raycastListText"},React.createElement("strong",null,props.title||""),props.subtitle?React.createElement("small",null,String(props.subtitle)):null),
     props.accessories?React.createElement("div",{className:"raycastAccessories"},props.accessories.map(function(item,index){return React.createElement("span",{key:index},item.text||item.tag||"");})):null,
     props.actions

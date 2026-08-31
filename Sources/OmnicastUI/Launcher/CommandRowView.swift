@@ -92,9 +92,7 @@ struct CommandIconView: View {
                     .resizable()
                     .scaledToFit()
             case .image(let url):
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: {
+                RemoteIconView(url: url) {
                     Image(systemName: "photo")
                 }
             case .emoji(let value):

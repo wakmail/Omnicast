@@ -43,9 +43,7 @@ struct ExtensionStoreDetailView: View {
 
     private var header: some View {
         HStack(spacing: LauncherTheme.Metrics.rowIconTitleSpacing) {
-            AsyncImage(url: extensionValue.iconURL) { image in
-                image.resizable().scaledToFit()
-            } placeholder: {
+            RemoteIconView(url: extensionValue.iconURL) {
                 Image(systemName: "puzzlepiece.extension")
                     .resizable()
                     .scaledToFit()
@@ -96,9 +94,7 @@ struct ExtensionStoreDetailView: View {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: LauncherTheme.Metrics.rowIconTitleSpacing) {
                         ForEach(screenshotURLs, id: \.absoluteString) { url in
-                            AsyncImage(url: url) { image in
-                                image.resizable().scaledToFit()
-                            } placeholder: {
+                            RemoteIconView(url: url) {
                                 ProgressView()
                             }
                             .frame(

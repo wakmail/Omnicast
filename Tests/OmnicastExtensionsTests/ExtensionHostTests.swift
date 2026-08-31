@@ -75,9 +75,13 @@ final class ExtensionHostTests: XCTestCase {
             throw XCTSkip("The store catalog did not render in this environment (WebKit timing or offline backend); run this check deliberately")
         }
         let text = try await webView.evaluateJavaScript("document.body.innerText") as? String
+        let imageSource = try await webView.evaluateJavaScript(
+            "document.querySelector('.raycastIcon img')?.getAttribute('src')"
+        ) as? String
         let errors = host.consoleMessages.filter { $0.level == "error" }
         XCTAssertGreaterThan(host.renderedItemCount, 0)
         XCTAssertTrue(text?.isEmpty == false, "store rendered no text")
+        XCTAssertEqual(imageSource, HostStoreClient.iconURL.absoluteString)
         XCTAssertTrue(errors.isEmpty, errors.map(\.message).joined(separator: "\n"))
     }
 
@@ -167,6 +171,7 @@ private actor HostStoreClient: RaycastStoreServing {
         title: "Kill Process",
         description: "Find and stop processes",
         author: "rolandleth",
+        iconURL: iconURL,
         categories: ["System"],
         commands: [
             RaycastStoreCommand(
@@ -177,6 +182,10 @@ private actor HostStoreClient: RaycastStoreServing {
         ],
         installCount: 42
     )
+
+    static let iconURL = URL(string:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )!
 }
 
 @MainActor

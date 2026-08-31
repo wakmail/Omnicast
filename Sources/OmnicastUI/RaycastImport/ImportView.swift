@@ -138,11 +138,12 @@ public struct ImportView: View {
                 }
             }
             if !result.extensionsToInstall.isEmpty {
-                Text("Extensions ready to install")
+                Text("Extensions")
                     .font(.headline)
                     .padding(.top, 4)
-                Text(result.extensionsToInstall.joined(separator: ", "))
-                    .foregroundStyle(.secondary)
+                ForEach(result.extensionsToInstall, id: \.self) { slug in
+                    extensionInstallRow(slug)
+                }
             }
             if !result.skippedItems.isEmpty {
                 DisclosureGroup("Skipped Item Details") {
@@ -157,6 +158,35 @@ public struct ImportView: View {
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private func extensionInstallRow(_ slug: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(slug)
+            Spacer()
+            switch model.extensionInstallStates[slug] {
+            case .installing:
+                Label("Installing", systemImage: "arrow.down.circle")
+                    .foregroundStyle(.secondary)
+            case .installed:
+                Label("Done", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .failed(let reason):
+                VStack(alignment: .trailing, spacing: 2) {
+                    Label("Failed", systemImage: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+            case nil:
+                Text("Waiting")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.callout)
     }
 
     private func failureSummary(_ message: String) -> some View {
