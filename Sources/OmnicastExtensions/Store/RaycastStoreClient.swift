@@ -12,7 +12,38 @@ public struct RaycastStoreCommand: Codable, Equatable, Sendable {
         self.title = title
         self.description = description
     }
+
+    enum CodingKeys: String, CodingKey {
+        case name, title, description
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? name
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    }
 }
+
+/// Decodes a JSON array of T, skipping any element that fails to decode so one
+/// odd catalog row cannot blank the whole store.
+struct LenientArray<T: Decodable>: Decodable {
+    let elements: [T]
+    init(from decoder: any Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var result: [T] = []
+        while !container.isAtEnd {
+            if let value = try? container.decode(T.self) {
+                result.append(value)
+            } else {
+                _ = try? container.decode(AnyDecodableSkip.self)
+            }
+        }
+        elements = result
+    }
+}
+
+private struct AnyDecodableSkip: Decodable {}
 
 public struct RaycastStoreExtension: Decodable, Equatable, Sendable {
     public let name: String
@@ -180,8 +211,23 @@ public final class RaycastStoreClient: RaycastStoreServing, @unchecked Sendable 
             items.append(URLQueryItem(name: "category", value: category))
         }
         components.queryItems = items
-        let response: SearchResponse = try await request(components.url!)
-        return RaycastStoreSearchResults(results: response.results, total: response.total)
+        // The backend returns a bare JSON array and does not filter server side,
+        // so decode the array and match the query locally.
+        let all: [RaycastStoreExtension] = try await requestLenientArray(components.url!)
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered: [RaycastStoreExtension]
+        if trimmed.isEmpty {
+            filtered = all
+        } else {
+            filtered = all.filter { item in
+                item.title.lowercased().contains(trimmed)
+                    || item.name.lowercased().contains(trimmed)
+                    || item.description.lowercased().contains(trimmed)
+                    || item.author.lowercased().contains(trimmed)
+            }
+        }
+        let page = Array(filtered.dropFirst(offset).prefix(limit))
+        return RaycastStoreSearchResults(results: page, total: filtered.count)
     }
 
     public func metadata(for slug: String) async throws -> RaycastStoreExtension {
@@ -230,6 +276,16 @@ public final class RaycastStoreClient: RaycastStoreServing, @unchecked Sendable 
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try decoder.decode(Value.self, from: data)
+    }
+
+    private func requestLenientArray<Element: Decodable>(_ url: URL) async throws -> [Element] {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+        request.setValue("Omnicast", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(LenientArray<Element>.self, from: data).elements
     }
 
     private func validate(response: URLResponse, data: Data) throws {
