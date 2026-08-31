@@ -6,6 +6,14 @@ import Foundation
 import OmnicastCore
 import UniformTypeIdentifiers
 
+public enum RaycastExtensionInstallState: Equatable, Sendable {
+    case installing
+    case installed
+    case failed(reason: String)
+}
+
+public typealias RaycastExtensionInstaller = @MainActor (String) async throws -> Void
+
 @MainActor
 public final class RaycastImportViewModel: ObservableObject {
     @Published public var fileURL: URL?
@@ -15,18 +23,22 @@ public final class RaycastImportViewModel: ObservableObject {
     @Published public private(set) var result: RaycastImportResult?
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var importFailureMessage: String?
+    @Published public private(set) var extensionInstallStates: [String: RaycastExtensionInstallState] = [:]
 
     private let reader: RayconfigReader
     private let importer: RaycastImporter
+    private let extensionInstaller: RaycastExtensionInstaller?
 
     public init(
         reader: RayconfigReader = RayconfigReader(),
         importer: RaycastImporter,
-        fileURL: URL? = nil
+        fileURL: URL? = nil,
+        extensionInstaller: RaycastExtensionInstaller? = nil
     ) {
         self.reader = reader
         self.importer = importer
         self.fileURL = fileURL
+        self.extensionInstaller = extensionInstaller
     }
 
     public var canRunImport: Bool {
@@ -73,6 +85,7 @@ public final class RaycastImportViewModel: ObservableObject {
         result = nil
         errorMessage = nil
         importFailureMessage = nil
+        extensionInstallStates = [:]
     }
 
     public func setSelected(_ category: RaycastImportCategory, selected: Bool) {
@@ -100,13 +113,16 @@ public final class RaycastImportViewModel: ObservableObject {
         result = nil
         errorMessage = nil
         importFailureMessage = nil
+        extensionInstallStates = [:]
         Task {
             await Task.yield()
             do {
                 let backup = try await Task.detached {
                     try reader.read(from: fileURL, password: password.isEmpty ? nil : password)
                 }.value
-                result = try importer.run(backup: backup, selections: selections)
+                let importResult = try importer.run(backup: backup, selections: selections)
+                result = importResult
+                await installExtensions(importResult.extensionsToInstall)
             } catch {
                 importFailureMessage = error.localizedDescription
             }
@@ -117,6 +133,24 @@ public final class RaycastImportViewModel: ObservableObject {
     public func prepareToRetry() {
         importFailureMessage = nil
         errorMessage = nil
+    }
+
+    public func installExtensions(_ slugs: [String]) async {
+        for slug in slugs {
+            extensionInstallStates[slug] = .installing
+            guard let extensionInstaller else {
+                extensionInstallStates[slug] = .failed(
+                    reason: "Extension installation is unavailable."
+                )
+                continue
+            }
+            do {
+                try await extensionInstaller(slug)
+                extensionInstallStates[slug] = .installed
+            } catch {
+                extensionInstallStates[slug] = .failed(reason: error.localizedDescription)
+            }
+        }
     }
 }
 

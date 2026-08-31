@@ -5,10 +5,16 @@ import SwiftUI
 
 public enum RaycastImportPresentation {
     @MainActor
-    public static func presenters(importer: RaycastImporter) -> [String: LauncherCommandPresenter] {
+    public static func presenters(
+        importer: RaycastImporter,
+        extensionInstaller: @escaping RaycastExtensionInstaller
+    ) -> [String: LauncherCommandPresenter] {
         [
             ImportFromRaycastCommand().id: { _, _ in
-                presentedView(importer: importer)
+                presentedView(
+                    importer: importer,
+                    extensionInstaller: extensionInstaller
+                )
             }
         ]
     }
@@ -16,9 +22,14 @@ public enum RaycastImportPresentation {
     @MainActor
     public static func presentedView(
         importer: RaycastImporter,
-        fileURL: URL? = nil
+        fileURL: URL? = nil,
+        extensionInstaller: @escaping RaycastExtensionInstaller
     ) -> LauncherPresentedView {
-        let model = RaycastImportViewModel(importer: importer, fileURL: fileURL)
+        let model = RaycastImportViewModel(
+            importer: importer,
+            fileURL: fileURL,
+            extensionInstaller: extensionInstaller
+        )
         return LauncherPresentedView(
             title: "Import from Raycast",
             content: AnyView(ImportView(viewModel: model)),

@@ -406,6 +406,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         .raycastListItem { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 8px 10px; border-radius: 8px; }
         .raycastListItem:hover, .raycastListItem.selected { background: rgba(255,255,255,.10); }
         .raycastIcon { display: grid; width: 24px; height: 24px; place-items: center; color: rgb(78,162,255); }
+        .raycastIcon img { width: 24px; height: 24px; object-fit: contain; }
         .raycastListText { display: flex; flex: 1; flex-direction: column; min-width: 0; }
         .raycastListText strong { overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
         .raycastListText small, .raycastAccessories { color: rgba(255,255,255,.74); }

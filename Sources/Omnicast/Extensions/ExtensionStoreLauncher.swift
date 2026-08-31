@@ -198,9 +198,7 @@ private struct ExtensionStoreRow: View {
 
     var body: some View {
         HStack(spacing: LauncherTheme.Metrics.rowIconTitleSpacing) {
-            AsyncImage(url: extensionValue.iconURL) { image in
-                image.resizable().scaledToFit()
-            } placeholder: {
+            RemoteIconView(url: extensionValue.iconURL) {
                 Image(systemName: "puzzlepiece.extension")
                     .resizable()
                     .scaledToFit()

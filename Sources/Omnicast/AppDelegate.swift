@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        ApplicationMenu.install(on: NSApp)
 
         do {
             let settingsStore = try SettingsStore()
@@ -248,6 +249,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             ])
             self.registry = registry
+            let importedExtensionInstaller = makeImportedExtensionInstaller(
+                extensionRegistry: extensionRegistry,
+                commandRegistry: registry,
+                navigationCoordinator: navigationCoordinator
+            )
 
             let panel = LauncherPanel(
                 keyEvents: keyEvents,
@@ -285,14 +291,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     onHide: { [weak panel] returningFocus in
                         panel?.hide(returningFocus: returningFocus)
                     },
-                    raycastImporter: raycastImporter
+                    raycastImporter: raycastImporter,
+                    importedExtensionInstaller: importedExtensionInstaller
                 ),
                 navigationCoordinator: navigationCoordinator,
                 onImportRayconfig: { [weak self] fileURL in
                     self?.navigationCoordinator.push(
                         RaycastImportPresentation.presentedView(
                             importer: raycastImporter,
-                            fileURL: fileURL
+                            fileURL: fileURL,
+                            extensionInstaller: importedExtensionInstaller
                         )
                     )
                 },

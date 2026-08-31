@@ -18,7 +18,8 @@ func makeLauncherPresentingCommands(
     colorHistoryStore: ColorHistoryStore,
     menuItemIndex: MenuItemIndex,
     onHide: @escaping (Bool) -> Void,
-    raycastImporter: RaycastImporter
+    raycastImporter: RaycastImporter,
+    importedExtensionInstaller: @escaping RaycastExtensionInstaller
 ) -> [String: LauncherCommandPresenter] {
     var presenters: [String: LauncherCommandPresenter] = [
         "clipboard:history": { _, query in
@@ -114,6 +115,42 @@ func makeLauncherPresentingCommands(
     presenters.merge(CalendarLauncherPresentation.presenters(service: calendarService)) {
         _, feature in feature
     }
-    presenters.merge(RaycastImportPresentation.presenters(importer: raycastImporter)) { _, feature in feature }
+    presenters.merge(RaycastImportPresentation.presenters(
+        importer: raycastImporter,
+        extensionInstaller: importedExtensionInstaller
+    )) { _, feature in feature }
     return presenters
+}
+
+@MainActor
+func makeImportedExtensionInstaller(
+    extensionRegistry: ExtensionRegistry,
+    commandRegistry: CommandRegistry,
+    navigationCoordinator: LauncherNavigationCoordinator
+) -> RaycastExtensionInstaller {
+    { slug in
+        do {
+            _ = try await extensionRegistry.install(name: slug)
+            await commandRegistry.invalidate()
+            navigationCoordinator.reloadCommands()
+        } catch {
+            await commandRegistry.invalidate()
+            navigationCoordinator.reloadCommands()
+            if case RaycastStoreError.requestFailed(let status, _) = error, status == 404 {
+                throw ImportedExtensionInstallationError.notFound(slug)
+            }
+            throw error
+        }
+    }
+}
+
+private enum ImportedExtensionInstallationError: LocalizedError {
+    case notFound(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notFound(let slug):
+            "The extension \(slug) was not found in the catalog."
+        }
+    }
 }
