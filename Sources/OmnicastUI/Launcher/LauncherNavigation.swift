@@ -10,6 +10,7 @@ public struct LauncherPresentedView {
     public let content: AnyView
     public let showsSearchField: Bool
     public let initialQuery: String?
+    public let preferredContentHeight: CGFloat?
     public let onQueryChange: (String) -> Void
     public let onKey: (LauncherKey) -> Bool
     public let onDismiss: () -> Void
@@ -19,6 +20,7 @@ public struct LauncherPresentedView {
         content: AnyView,
         showsSearchField: Bool = true,
         initialQuery: String? = nil,
+        preferredContentHeight: CGFloat? = nil,
         onQueryChange: @escaping (String) -> Void = { _ in },
         onKey: @escaping (LauncherKey) -> Bool = { _ in false },
         onDismiss: @escaping () -> Void = {}
@@ -27,6 +29,7 @@ public struct LauncherPresentedView {
         self.content = content
         self.showsSearchField = showsSearchField
         self.initialQuery = initialQuery
+        self.preferredContentHeight = preferredContentHeight
         self.onQueryChange = onQueryChange
         self.onKey = onKey
         self.onDismiss = onDismiss

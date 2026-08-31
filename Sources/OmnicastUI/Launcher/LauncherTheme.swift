@@ -20,6 +20,9 @@ public enum LauncherTheme {
         public static let sectionLeadingPadding: CGFloat = 16
         public static let sectionTopPadding: CGFloat = 10
         public static let sectionBottomPadding: CGFloat = 4
+        public static let sectionHeaderHeight: CGFloat = 13
+        public static let listTopPadding: CGFloat = sectionTopPadding
+        public static let listBottomPadding: CGFloat = sectionBottomPadding
 
         public static let rowHeight: CGFloat = 54
         public static let rowOuterInset: CGFloat = 8
@@ -49,6 +52,7 @@ public enum LauncherTheme {
         public static let toastVerticalPadding: CGFloat = 8
         public static let toastBottomPadding: CGFloat = 48
         public static let toastAnimationDuration: TimeInterval = 0.18
+        public static let panelResizeAnimationDuration: TimeInterval = 0.12
 
         public static let actionPanelSpacing: CGFloat = 4
         public static let actionPanelPadding: CGFloat = 12
@@ -60,6 +64,36 @@ public enum LauncherTheme {
             case .standard: panelHeight
             case .compact: compactPanelHeight
             }
+        }
+
+        public static var minimumPanelHeight: CGFloat {
+            launcherChromeHeight + listTopPadding + rowHeight + listBottomPadding
+        }
+
+        public static func panelHeight(
+            rowCount: Int,
+            sectionCount: Int,
+            windowMode: LauncherWindowMode
+        ) -> CGFloat {
+            let listHeight = listTopPadding
+                + CGFloat(max(0, sectionCount)) * sectionHeaderHeight
+                + CGFloat(max(0, rowCount)) * rowHeight
+                + listBottomPadding
+            return panelHeight(contentHeight: listHeight, windowMode: windowMode)
+        }
+
+        public static func panelHeight(
+            contentHeight: CGFloat,
+            windowMode: LauncherWindowMode
+        ) -> CGFloat {
+            min(
+                max(launcherChromeHeight + max(0, contentHeight), minimumPanelHeight),
+                panelHeight(for: windowMode)
+            )
+        }
+
+        private static var launcherChromeHeight: CGFloat {
+            searchHeight + footerHeight + dividerHeight * 2
         }
     }
 

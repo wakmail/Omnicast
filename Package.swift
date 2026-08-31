@@ -56,7 +56,7 @@ let package = Package(
         ),
         .testTarget(
             name: "OmnicastTests",
-            dependencies: ["Omnicast"]
+            dependencies: ["Omnicast", "OmnicastUI"]
         )
     ],
     swiftLanguageModes: [.v5]
