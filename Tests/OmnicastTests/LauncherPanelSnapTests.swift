@@ -17,12 +17,12 @@ final class LauncherPanelSnapTests: XCTestCase {
         )
     }
 
-    func testSnapUsesFrameCentersAndIncludesThresholdBoundary() {
+    func testSnapUsesFrameCentersAndIncludesTwelvePointThresholdBoundary() {
         let target = launcherPanelDefaultFrame(
             panelSize: panelSize,
             screenVisibleFrame: mainScreen
         )
-        let dropped = target.offsetBy(dx: 28.8, dy: 38.4)
+        let dropped = target.offsetBy(dx: 0, dy: 12)
 
         XCTAssertEqual(
             launcherPanelSnapTarget(
@@ -41,7 +41,7 @@ final class LauncherPanelSnapTests: XCTestCase {
 
         XCTAssertNil(
             launcherPanelSnapTarget(
-                droppedFrame: target.offsetBy(dx: 48.01, dy: 0),
+                droppedFrame: target.offsetBy(dx: 12.01, dy: 0),
                 screenVisibleFrames: [mainScreen]
             )
         )
@@ -53,7 +53,7 @@ final class LauncherPanelSnapTests: XCTestCase {
             panelSize: panelSize,
             screenVisibleFrame: leftScreen
         )
-        let dropped = target.offsetBy(dx: -20, dy: 12)
+        let dropped = target.offsetBy(dx: -8, dy: 6)
 
         XCTAssertEqual(
             launcherPanelSnapTarget(
@@ -73,7 +73,7 @@ final class LauncherPanelSnapTests: XCTestCase {
 
         XCTAssertEqual(
             launcherPanelSnapTarget(
-                droppedFrame: target.offsetBy(dx: 0, dy: -47),
+                droppedFrame: target.offsetBy(dx: 0, dy: -11),
                 screenVisibleFrames: [mainScreen, upperScreen]
             ),
             target
@@ -100,7 +100,7 @@ final class LauncherPanelSnapTests: XCTestCase {
 
         XCTAssertEqual(alignment.verticalGuideX, 720)
         XCTAssertNil(alignment.horizontalGuideY)
-        XCTAssertEqual(alignment.magnetizedFrame.origin.x, 380)
+        XCTAssertEqual(alignment.magnetizedFrame.origin.x, 385.625)
         XCTAssertEqual(alignment.magnetizedFrame.origin.y, panelFrame.origin.y)
     }
 
@@ -116,7 +116,7 @@ final class LauncherPanelSnapTests: XCTestCase {
         XCTAssertNil(alignment.verticalGuideX)
         XCTAssertEqual(alignment.horizontalGuideY, 810)
         XCTAssertEqual(alignment.magnetizedFrame.origin.x, panelFrame.origin.x)
-        XCTAssertEqual(alignment.magnetizedFrame.origin.y, 330)
+        XCTAssertEqual(alignment.magnetizedFrame.origin.y, 335.625)
     }
 
     func testGuidesActivateAtEightPointBoundary() throws {
@@ -133,7 +133,10 @@ final class LauncherPanelSnapTests: XCTestCase {
 
         XCTAssertEqual(alignment.verticalGuideX, mainScreen.midX)
         XCTAssertEqual(alignment.horizontalGuideY, defaultFrame.maxY)
-        XCTAssertEqual(alignment.magnetizedFrame, defaultFrame)
+        XCTAssertEqual(
+            alignment.magnetizedFrame,
+            defaultFrame.offsetBy(dx: -6, dy: 6)
+        )
     }
 
     func testGuidesDoNotActivateBeyondEightPoints() throws {
@@ -169,7 +172,10 @@ final class LauncherPanelSnapTests: XCTestCase {
         XCTAssertEqual(alignment.screenVisibleFrame, leftScreen)
         XCTAssertEqual(alignment.verticalGuideX, -960)
         XCTAssertEqual(alignment.horizontalGuideY, 870)
-        XCTAssertEqual(alignment.magnetizedFrame, defaultFrame)
+        XCTAssertEqual(
+            alignment.magnetizedFrame,
+            defaultFrame.offsetBy(dx: 4.5, dy: -5.25)
+        )
     }
 
     func testGuideCoordinatesRespectScreenAboveMainDisplay() throws {
@@ -188,7 +194,10 @@ final class LauncherPanelSnapTests: XCTestCase {
         XCTAssertEqual(alignment.screenVisibleFrame, upperScreen)
         XCTAssertEqual(alignment.verticalGuideX, 880)
         XCTAssertEqual(alignment.horizontalGuideY, 1_610)
-        XCTAssertEqual(alignment.magnetizedFrame, defaultFrame)
+        XCTAssertEqual(
+            alignment.magnetizedFrame,
+            defaultFrame.offsetBy(dx: -3, dy: 2.25)
+        )
     }
 
     func testGuideAlignmentRequiresScreenAndValidActivationDistance() {

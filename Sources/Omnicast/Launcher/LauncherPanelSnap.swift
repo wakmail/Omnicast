@@ -2,8 +2,9 @@
 
 import CoreGraphics
 
-let launcherPanelSnapDistance: CGFloat = 48
+let launcherPanelSnapDistance: CGFloat = 12
 let launcherPanelGuideActivationDistance: CGFloat = 8
+let launcherPanelGuideNudgeStrength: CGFloat = 0.25
 
 struct LauncherPanelGuideAlignment: Equatable {
     let screenVisibleFrame: CGRect
@@ -88,10 +89,12 @@ func launcherPanelGuideAlignment(
 
     var magnetizedFrame = panelFrame
     if alignsVertically {
-        magnetizedFrame.origin.x = defaultFrame.origin.x
+        magnetizedFrame.origin.x += (defaultFrame.origin.x - panelFrame.origin.x)
+            * launcherPanelGuideNudgeStrength
     }
     if alignsHorizontally {
-        magnetizedFrame.origin.y = defaultFrame.origin.y
+        magnetizedFrame.origin.y += (defaultFrame.origin.y - panelFrame.origin.y)
+            * launcherPanelGuideNudgeStrength
     }
 
     return LauncherPanelGuideAlignment(
