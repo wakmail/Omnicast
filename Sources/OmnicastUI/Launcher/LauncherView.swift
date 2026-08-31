@@ -119,10 +119,19 @@ public struct LauncherView: View {
             .frame(height: LauncherTheme.Metrics.searchHeight)
             .padding(.horizontal, LauncherTheme.Metrics.searchHorizontalPadding)
         } else {
-            LauncherSearchField(
-                text: $model.query,
-                placeholder: model.searchPlaceholder
-            )
+            HStack(spacing: LauncherTheme.Metrics.searchIconSpacing) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(
+                        size: LauncherTheme.Metrics.searchIconSize,
+                        weight: .medium
+                    ))
+                    .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
+
+                LauncherSearchField(
+                    text: $model.query,
+                    placeholder: model.searchPlaceholder
+                )
+            }
             .frame(height: LauncherTheme.Metrics.searchHeight)
             .padding(.horizontal, LauncherTheme.Metrics.searchHorizontalPadding)
         }
@@ -156,6 +165,9 @@ public struct LauncherView: View {
                             .padding(.horizontal, LauncherTheme.Metrics.rowOuterInset)
                             .id(result.command.id)
                             .contentShape(Rectangle())
+                            .onAppear {
+                                prefetchIcons(startingAt: index)
+                            }
                             .onTapGesture {
                                 model.select(index)
                                 model.executeSelected()
@@ -200,6 +212,10 @@ public struct LauncherView: View {
                         width: LauncherTheme.Metrics.footerIconSize,
                         height: LauncherTheme.Metrics.footerIconSize
                     )
+                    .clipShape(RoundedRectangle(
+                        cornerRadius: LauncherTheme.Metrics.footerIconCornerRadius,
+                        style: .continuous
+                    ))
 
                 Text(command.title)
                     .font(LauncherTheme.Typography.footerTitle)
@@ -268,6 +284,18 @@ public struct LauncherView: View {
     private var divider: some View {
         LauncherTheme.Palette.borderPrimary(for: colorScheme)
             .frame(height: LauncherTheme.Metrics.dividerHeight)
+    }
+
+    private func prefetchIcons(startingAt index: Int) {
+        let endIndex = min(
+            model.results.endIndex,
+            index + LauncherTheme.Metrics.iconPrefetchLookahead + 1
+        )
+        let urls = model.results[index..<endIndex].compactMap { result -> URL? in
+            guard case .image(let url) = result.command.icon else { return nil }
+            return url
+        }
+        RemoteIconPrefetcher.prefetch(urls)
     }
 
     private var panelShape: RoundedRectangle {

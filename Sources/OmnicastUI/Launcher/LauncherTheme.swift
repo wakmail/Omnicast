@@ -11,26 +11,31 @@ public enum LauncherTheme {
         public static let panelCornerRadius: CGFloat = 12
         public static let borderWidth: CGFloat = 1
 
-        public static let searchHeight: CGFloat = 56
+        public static let searchHeight: CGFloat = 52
         public static let searchHorizontalPadding: CGFloat = 16
+        public static let searchIconSize: CGFloat = 13
+        public static let searchIconSpacing: CGFloat = 10
         public static let dividerHeight: CGFloat = 1
 
         public static let sectionLeadingPadding: CGFloat = 16
-        public static let sectionTopPadding: CGFloat = 8
+        public static let sectionTopPadding: CGFloat = 10
         public static let sectionBottomPadding: CGFloat = 4
 
-        public static let rowHeight: CGFloat = 40
-        public static let rowOuterInset: CGFloat = 6
-        public static let rowContentPadding: CGFloat = 10
-        public static let rowIconSize: CGFloat = 24
+        public static let rowHeight: CGFloat = 46
+        public static let rowOuterInset: CGFloat = 8
+        public static let rowContentPadding: CGFloat = 14
+        public static let rowIconSize: CGFloat = 28
+        public static let rowIconCornerRadius: CGFloat = 6
         public static let rowIconTitleSpacing: CGFloat = 12
         public static let rowSubtitleSpacing: CGFloat = 8
         public static let rowTrailingSpacing: CGFloat = 8
         public static let rowCornerRadius: CGFloat = 8
 
-        public static let footerHeight: CGFloat = 44
+        public static let iconPrefetchLookahead = 8
+        public static let footerHeight: CGFloat = 42
         public static let footerHorizontalPadding: CGFloat = 16
         public static let footerIconSize: CGFloat = 16
+        public static let footerIconCornerRadius: CGFloat = 4
         public static let footerIconTitleSpacing: CGFloat = 8
         public static let footerGroupSpacing: CGFloat = 18
         public static let footerLabelSpacing: CGFloat = 7
@@ -59,8 +64,8 @@ public enum LauncherTheme {
     }
 
     public enum Typography {
-        public static let search = Font.system(size: 20, weight: .regular)
-        public static let searchNSFont = NSFont.systemFont(ofSize: 20, weight: .regular)
+        public static let search = Font.system(size: 18, weight: .regular)
+        public static let searchNSFont = NSFont.systemFont(ofSize: 18, weight: .regular)
         public static let section = Font.system(size: 11, weight: .semibold)
         public static let rowTitle = Font.system(size: 14, weight: .medium)
         public static let rowSubtitle = Font.system(size: 13, weight: .regular)
@@ -95,7 +100,11 @@ public enum LauncherTheme {
         }
 
         public static func selectedRow(for scheme: ColorScheme) -> Color {
-            scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+            scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+        }
+
+        public static func selectedRowBorder(for scheme: ColorScheme) -> Color {
+            scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.06)
         }
 
         public static func keyCap(for scheme: ColorScheme) -> Color {

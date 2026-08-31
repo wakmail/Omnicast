@@ -100,7 +100,7 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         controller.add(self, name: "log")
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = controller
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = .default()
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -392,25 +392,36 @@ public final class ExtensionHost: NSObject, WKScriptMessageHandler, WKNavigation
         * { box-sizing: border-box; }
         html, body, #root { width: 100%; height: 100%; margin: 0; }
         body { overflow: hidden; background: rgba(7,9,13,.92); }
-        .raycastList { height: 100%; }
-        .raycastSearch { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
-        .raycastSearch input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; outline: none; font: 20px system-ui; }
-        .raycastSearch input::placeholder { color: rgba(255,255,255,.5); }
+        button, input, select { font-family: inherit; }
+        .raycastList { display: grid; height: 100%; grid-template-rows: 52px minmax(0,1fr) 42px; }
+        .raycastSearch { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
+        .raycastSearchIcon { width: 13px; height: 13px; flex: none; fill: none; stroke: rgba(255,255,255,.74); stroke-linecap: round; stroke-width: 1.7; }
+        .raycastSearch input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; outline: none; font-size: 18px; font-weight: 400; }
+        .raycastSearch input::placeholder { color: rgba(255,255,255,.74); }
         .raycastDropdown { border: 1px solid rgba(255,255,255,.08); border-radius: 6px; background: rgba(255,255,255,.08); color: inherit; padding: 5px 8px; }
         .raycastLoading { color: rgba(255,255,255,.74); }
-        .raycastListBody { height: calc(100% - 56px); overflow: auto; padding: 6px; }
+        .raycastListBody { min-height: 0; overflow: auto; padding: 0; }
         .raycastDetail { height: 100%; overflow: auto; padding: 16px; }
         .raycastDetail > .raycastActions { display: flex; position: static; float: right; margin: 0 0 12px 12px; }
-        .raycastSection h3 { display: flex; justify-content: space-between; margin: 8px 10px 4px; color: rgba(255,255,255,.74); font-size: 11px; font-weight: 600; }
+        .raycastSection h3 { display: flex; justify-content: space-between; margin: 0; padding: 10px 16px 4px; color: rgba(255,255,255,.74); font-size: 11px; font-weight: 600; line-height: 16px; text-transform: uppercase; }
         .raycastSection h3 small { font-weight: 400; }
-        .raycastListItem { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 8px 10px; border-radius: 8px; }
-        .raycastListItem:hover, .raycastListItem.selected { background: rgba(255,255,255,.10); }
-        .raycastIcon { display: grid; width: 24px; height: 24px; place-items: center; color: rgb(78,162,255); }
-        .raycastIcon img { width: 24px; height: 24px; object-fit: contain; }
-        .raycastListText { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-        .raycastListText strong { overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-        .raycastListText small, .raycastAccessories { color: rgba(255,255,255,.74); }
-        .raycastAccessories { display: flex; gap: 18px; }
+        .raycastListItem { display: flex; align-items: center; gap: 12px; height: 46px; margin: 0 8px; padding: 0 14px; border: 1px solid transparent; border-radius: 8px; }
+        .raycastListItem.selected { border-color: rgba(255,255,255,.06); background: rgba(255,255,255,.08); }
+        .raycastIcon { display: grid; width: 28px; height: 28px; flex: none; overflow: hidden; place-items: center; border-radius: 6px; color: rgb(78,162,255); }
+        .raycastIcon img { width: 28px; height: 28px; object-fit: contain; }
+        .raycastListText { display: flex; flex: 1; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; }
+        .raycastListText strong { max-width: 55%; overflow: hidden; flex: 0 1 auto; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+        .raycastListText small { min-width: 0; overflow: hidden; flex: 1 1 auto; color: rgba(255,255,255,.74); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+        .raycastAccessories { display: flex; flex: none; gap: 18px; color: rgba(255,255,255,.74); font-size: 12px; white-space: nowrap; }
+        .raycastFooter { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 16px; border-top: 1px solid rgba(255,255,255,.08); }
+        .raycastFooterSelection { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; flex: 1; color: rgba(255,255,255,.74); font-size: 13px; }
+        .raycastFooterSelection > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .raycastFooterIcon { display: grid; width: 16px; height: 16px; flex: none; overflow: hidden; place-items: center; border-radius: 4px; }
+        .raycastFooterIcon img { width: 16px; height: 16px; object-fit: contain; }
+        .raycastFooterControls { display: flex; align-items: center; gap: 18px; }
+        .raycastFooterButton { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: rgba(255,255,255,.92); padding: 4px 6px; font-size: 13px; }
+        .raycastFooterButton:hover { border-radius: 6px; background: rgba(255,255,255,.06); }
+        .raycastFooterButton kbd { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 4px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.74); font: 500 11px ui-monospace, monospace; line-height: 20px; }
         .raycastActions { display: none; position: fixed; z-index: 10; right: 14px; bottom: 14px; flex-direction: column; gap: 4px; width: 210px; padding: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(24,24,28,.96); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
         .actionPanelOpen .raycastListItem.selected > .raycastActions { display: flex; }
         .raycastAction { display: flex; justify-content: space-between; border: 0; border-radius: 6px; background: transparent; color: inherit; padding: 7px 8px; text-align: left; }
