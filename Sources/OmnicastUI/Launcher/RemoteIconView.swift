@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import OmnicastCore
 import SwiftUI
 
 @MainActor
@@ -41,7 +42,7 @@ private final class RemoteIconLoader: ObservableObject {
     @Published private(set) var image: NSImage?
 
     private var currentURL: URL?
-    private var task: URLSessionDataTask?
+    private var task: Task<Void, Never>?
 
     func load(_ url: URL?) {
         guard currentURL != url || (image == nil && task == nil) else { return }
@@ -50,34 +51,16 @@ private final class RemoteIconLoader: ObservableObject {
         image = nil
         guard let url else { return }
 
-        if let cached = RemoteIconCache.shared.image(for: url) {
-            image = cached
-            return
-        }
-        if url.isFileURL {
-            guard let image = NSImage(contentsOf: url) else { return }
-            RemoteIconCache.shared.insert(image, for: url)
-            self.image = image
-            return
-        }
-
-        task = URLSession.shared.dataTask(with: url) { [weak self] data, response, _ in
-            guard let data,
-                  (response as? HTTPURLResponse).map({ 200..<300 ~= $0.statusCode }) ?? true else {
-                Task { @MainActor [weak self] in self?.task = nil }
+        task = Task { [weak self] in
+            let loadedImage = await RemoteIconCache.shared.load(url)
+            guard !Task.isCancelled,
+                  let self,
+                  self.currentURL == url else {
                 return
             }
-            Task { @MainActor [weak self] in
-                guard let self, self.currentURL == url, let image = NSImage(data: data) else {
-                    self?.task = nil
-                    return
-                }
-                RemoteIconCache.shared.insert(image, for: url)
-                self.image = image
-                self.task = nil
-            }
+            self.image = loadedImage
+            self.task = nil
         }
-        task?.resume()
     }
 
     func cancel() {
@@ -87,10 +70,11 @@ private final class RemoteIconLoader: ObservableObject {
 }
 
 @MainActor
-private final class RemoteIconCache {
+final class RemoteIconCache {
     static let shared = RemoteIconCache()
 
     private let cache = NSCache<NSURL, NSImage>()
+    private var inFlight: [URL: Task<NSImage?, Never>] = [:]
 
     private init() {
         cache.countLimit = 128
@@ -102,5 +86,50 @@ private final class RemoteIconCache {
 
     func insert(_ image: NSImage, for url: URL) {
         cache.setObject(image, forKey: url as NSURL)
+    }
+
+    func load(_ url: URL) async -> NSImage? {
+        if let image = image(for: url) { return image }
+        if let task = inFlight[url] { return await task.value }
+
+        let task = Task<NSImage?, Never> {
+            if url.isFileURL {
+                return NSImage(contentsOf: url)
+            }
+            if let data = await IconDiskCache.shared.data(for: url),
+               let image = NSImage(data: data) {
+                return image
+            }
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                if let response = response as? HTTPURLResponse,
+                   !(200..<300).contains(response.statusCode) {
+                    return nil
+                }
+                guard let image = NSImage(data: data) else { return nil }
+                try? await IconDiskCache.shared.store(data, for: url)
+                return image
+            } catch {
+                return nil
+            }
+        }
+        inFlight[url] = task
+        let loadedImage = await task.value
+        inFlight[url] = nil
+        if let loadedImage {
+            insert(loadedImage, for: url)
+        }
+        return loadedImage
+    }
+}
+
+@MainActor
+enum RemoteIconPrefetcher {
+    static func prefetch(_ urls: [URL]) {
+        for url in Set(urls) where RemoteIconCache.shared.image(for: url) == nil {
+            Task {
+                _ = await RemoteIconCache.shared.load(url)
+            }
+        }
     }
 }

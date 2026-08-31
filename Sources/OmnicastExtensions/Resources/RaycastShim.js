@@ -48,13 +48,22 @@ function List(props){
   var selectedState=React.useState(null);
   var selected=selectedState[0];
   var setSelected=selectedState[1];
+  var selectedInfoState=React.useState(null);
+  var selectedInfo=selectedInfoState[0];
+  var setSelectedInfo=selectedInfoState[1];
   var panelState=React.useState(false);
   var panelOpen=panelState[0];
   var setPanelOpen=panelState[1];
+  function selectItem(item){
+    if(!item){setSelected(null);setSelectedInfo(null);return;}
+    setSelected(item.dataset.itemId);
+    setSelectedInfo({title:item.dataset.itemTitle||"",icon:item.dataset.itemIcon||"",imageIcon:item.dataset.itemImageIcon==="true"});
+  }
   React.useEffect(function(){
     var frame=requestAnimationFrame(function(){
       var items=visibleItems();
-      if(items.length&&!items.some(function(item){return item.dataset.itemId===selected;}))setSelected(items[0].dataset.itemId);
+      if(!items.length)selectItem(null);
+      else if(!items.some(function(item){return item.dataset.itemId===selected;}))selectItem(items[0]);
       reportRendered();
     });
     return function(){cancelAnimationFrame(frame);};
@@ -68,7 +77,7 @@ function List(props){
       if(event.key==="ArrowDown"||event.key==="ArrowUp"){
         event.preventDefault();
         index=(index+(event.key==="ArrowDown"?1:-1)+items.length)%items.length;
-        setSelected(items[index].dataset.itemId);
+        selectItem(items[index]);
         items[index].scrollIntoView({block:"nearest"});
         setPanelOpen(false);
       }else if(event.key==="Enter"){
@@ -88,14 +97,27 @@ function List(props){
     setQuery(value);
     if(props.onSearchTextChange)props.onSearchTextChange(value);
   }
-  return React.createElement(ListContext.Provider,{value:{query:query,selected:selected,select:setSelected}},
+  function openSelected(){
+    var item=document.querySelector('.raycastListItem[data-item-id="'+selected+'"]');
+    var action=item&&item.querySelector(".raycastAction");
+    if(action)action.click();
+  }
+  return React.createElement(ListContext.Provider,{value:{query:query,selected:selected,select:function(id,info){setSelected(id);setSelectedInfo(info);}}},
     React.createElement("section",{className:"raycastList"+(panelOpen?" actionPanelOpen":"")},
       React.createElement("header",{className:"raycastSearch"},
+        React.createElement("svg",{className:"raycastSearchIcon",viewBox:"0 0 16 16","aria-hidden":"true"},React.createElement("circle",{cx:"6.8",cy:"6.8",r:"4.8"}),React.createElement("path",{d:"m10.4 10.4 3.4 3.4"})),
         React.createElement("input",{autoFocus:true,placeholder:props.searchBarPlaceholder||"Search",value:query,onChange:change}),
         props.searchBarAccessory,
         props.isLoading?React.createElement("span",{className:"raycastLoading"},"Loading"):null
       ),
-      React.createElement("div",{className:"raycastListBody"},props.children)
+      React.createElement("div",{className:"raycastListBody"},props.children),
+      React.createElement("footer",{className:"raycastFooter"},
+        React.createElement("div",{className:"raycastFooterSelection"},selectedInfo?React.createElement(React.Fragment,null,selectedInfo.icon?React.createElement("span",{className:"raycastFooterIcon"},selectedInfo.imageIcon?React.createElement("img",{src:selectedInfo.icon,alt:""}):selectedInfo.icon):null,React.createElement("span",null,selectedInfo.title)):React.createElement("span",null,"No selection")),
+        React.createElement("div",{className:"raycastFooterControls"},
+          React.createElement("button",{className:"raycastFooterButton",disabled:!selected,onClick:openSelected},"Open",React.createElement("kbd",null,"Enter")),
+          React.createElement("button",{className:"raycastFooterButton",disabled:!selected,onClick:function(){setPanelOpen(function(value){return !value;});}},"Actions",React.createElement("kbd",null,"⌘ K"))
+        )
+      )
     )
   );
 }
@@ -107,7 +129,8 @@ List.Item=function(props){
   var selected=context.selected===id;
   var icon=typeof props.icon==="string"?props.icon:(props.icon&&props.icon.source)||"";
   var imageIcon=typeof icon==="string"&&/^(https?:|data:|file:)/i.test(icon);
-  return React.createElement("article",{className:"raycastListItem"+(selected?" selected":""),style:hidden?{display:"none"}:null,"data-item-id":id,tabIndex:selected?0:-1,onMouseEnter:function(){context.select(id);},onClick:function(){context.select(id);if(props.onAction)runAction(props.onAction);}},
+  var info={title:String(props.title||""),icon:icon,imageIcon:imageIcon};
+  return React.createElement("article",{className:"raycastListItem"+(selected?" selected":""),style:hidden?{display:"none"}:null,"data-item-id":id,"data-item-title":info.title,"data-item-icon":info.icon,"data-item-image-icon":String(info.imageIcon),tabIndex:selected?0:-1,onMouseEnter:function(){context.select(id,info);},onClick:function(){context.select(id,info);if(props.onAction)runAction(props.onAction);}},
     icon?React.createElement("span",{className:"raycastIcon"},imageIcon?React.createElement("img",{src:icon,alt:"",onError:function(event){console.error("Could not load image "+icon);event.currentTarget.style.display="none";}}):(typeof icon==="string"&&icon.length<5?icon:"◆")):null,
     React.createElement("div",{className:"raycastListText"},React.createElement("strong",null,props.title||""),props.subtitle?React.createElement("small",null,String(props.subtitle)):null),
     props.accessories?React.createElement("div",{className:"raycastAccessories"},props.accessories.map(function(item,index){return React.createElement("span",{key:index},item.text||item.tag||"");})):null,

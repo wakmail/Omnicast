@@ -14,6 +14,8 @@ final class LauncherPanel: NSPanel {
     private var isDraggingPanel = false
     private var localMouseUpMonitor: Any?
     private var globalMouseUpMonitor: Any?
+    private var nudgedVerticalGuide = false
+    private var nudgedHorizontalGuide = false
     private let alignmentGuide = LauncherPanelAlignmentGuideWindow()
     private(set) var hiddenAt: Date?
 
@@ -224,6 +226,8 @@ final class LauncherPanel: NSPanel {
     private func windowWillMove(_ notification: Notification) {
         guard isVisible, !positioningProgrammatically, !isDraggingPanel else { return }
         isDraggingPanel = true
+        nudgedVerticalGuide = false
+        nudgedHorizontalGuide = false
         updateAlignmentGuides()
         installMouseUpMonitors()
     }
@@ -271,9 +275,27 @@ final class LauncherPanel: NSPanel {
             return
         }
 
-        if alignment.magnetizedFrame.origin != frame.origin {
+        var nudgedOrigin = frame.origin
+        if alignment.verticalGuideX != nil {
+            if !nudgedVerticalGuide {
+                nudgedOrigin.x = alignment.magnetizedFrame.origin.x
+                nudgedVerticalGuide = true
+            }
+        } else {
+            nudgedVerticalGuide = false
+        }
+        if alignment.horizontalGuideY != nil {
+            if !nudgedHorizontalGuide {
+                nudgedOrigin.y = alignment.magnetizedFrame.origin.y
+                nudgedHorizontalGuide = true
+            }
+        } else {
+            nudgedHorizontalGuide = false
+        }
+
+        if nudgedOrigin != frame.origin {
             positioningProgrammatically = true
-            setFrameOrigin(alignment.magnetizedFrame.origin)
+            setFrameOrigin(nudgedOrigin)
             positioningProgrammatically = false
         }
 

@@ -16,6 +16,10 @@ struct CommandRowView: View {
                     width: LauncherTheme.Metrics.rowIconSize,
                     height: LauncherTheme.Metrics.rowIconSize
                 )
+                .clipShape(RoundedRectangle(
+                    cornerRadius: LauncherTheme.Metrics.rowIconCornerRadius,
+                    style: .continuous
+                ))
 
             if command is CalculatorResultCommand {
                 Text(command.title)
@@ -43,6 +47,7 @@ struct CommandRowView: View {
                             .font(LauncherTheme.Typography.rowSubtitle)
                             .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
                             .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
 
@@ -57,20 +62,22 @@ struct CommandRowView: View {
         .padding(.horizontal, LauncherTheme.Metrics.rowContentPadding)
         .frame(maxWidth: .infinity, minHeight: LauncherTheme.Metrics.rowHeight, maxHeight: LauncherTheme.Metrics.rowHeight)
         .background {
-            RoundedRectangle(
-                cornerRadius: LauncherTheme.Metrics.rowCornerRadius,
-                style: .continuous
-            )
-            .fill(isSelected ? LauncherTheme.Palette.selectedRow(for: colorScheme) : Color.clear)
-            .overlay {
+            if isSelected {
                 RoundedRectangle(
                     cornerRadius: LauncherTheme.Metrics.rowCornerRadius,
                     style: .continuous
                 )
-                .strokeBorder(
-                    isSelected ? LauncherTheme.Palette.borderPrimary(for: colorScheme) : Color.clear,
-                    lineWidth: LauncherTheme.Metrics.borderWidth
-                )
+                .fill(LauncherTheme.Palette.selectedRow(for: colorScheme))
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: LauncherTheme.Metrics.rowCornerRadius,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        LauncherTheme.Palette.selectedRowBorder(for: colorScheme),
+                        lineWidth: LauncherTheme.Metrics.borderWidth
+                    )
+                }
             }
         }
     }
