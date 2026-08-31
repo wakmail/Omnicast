@@ -9,6 +9,7 @@ public struct LauncherView: View {
     @ObservedObject private var settingsStore: SettingsStore
     @Environment(\.colorScheme) private var colorScheme
     private let onImportRayconfig: (URL) -> Void
+    private let onHeightChange: (CGFloat, Bool) -> Void
 
     @MainActor
     public init(
@@ -23,6 +24,7 @@ public struct LauncherView: View {
         presentingCommands: [String: LauncherCommandPresenter] = [:],
         navigationCoordinator: LauncherNavigationCoordinator? = nil,
         onImportRayconfig: @escaping (URL) -> Void = { _ in },
+        onHeightChange: @escaping (CGFloat, Bool) -> Void = { _, _ in },
         onHide: @escaping (Bool) -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
@@ -41,6 +43,7 @@ public struct LauncherView: View {
         self.toasts = toasts
         self.settingsStore = settingsStore
         self.onImportRayconfig = onImportRayconfig
+        self.onHeightChange = onHeightChange
     }
 
     public var body: some View {
@@ -85,7 +88,7 @@ public struct LauncherView: View {
         }
         .frame(
             width: LauncherTheme.Metrics.panelWidth,
-            height: LauncherTheme.Metrics.panelHeight(for: settingsStore.settings.windowMode)
+            height: desiredPanelHeight
         )
         .clipShape(panelShape)
         .overlay {
@@ -104,6 +107,12 @@ public struct LauncherView: View {
                     toasts.show(error.localizedDescription)
                 }
             }
+        }
+        .onAppear {
+            onHeightChange(desiredPanelHeight, false)
+        }
+        .onChange(of: desiredPanelHeight) { _, height in
+            onHeightChange(height, true)
         }
     }
 
@@ -145,8 +154,7 @@ public struct LauncherView: View {
                         .font(LauncherTheme.Typography.section)
                         .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
                         .padding(.leading, LauncherTheme.Metrics.sectionLeadingPadding)
-                        .padding(.top, LauncherTheme.Metrics.sectionTopPadding)
-                        .padding(.bottom, LauncherTheme.Metrics.sectionBottomPadding)
+                        .frame(height: LauncherTheme.Metrics.sectionHeaderHeight)
 
                     if model.isLoading {
                         ProgressView()
@@ -179,6 +187,8 @@ public struct LauncherView: View {
                         }
                     }
                 }
+                .padding(.top, LauncherTheme.Metrics.listTopPadding)
+                .padding(.bottom, LauncherTheme.Metrics.listBottomPadding)
             }
             .scrollIndicators(.hidden)
             .onChange(of: model.selectedIndex) {
@@ -302,6 +312,24 @@ public struct LauncherView: View {
         RoundedRectangle(
             cornerRadius: LauncherTheme.Metrics.panelCornerRadius,
             style: .continuous
+        )
+    }
+
+    private var desiredPanelHeight: CGFloat {
+        let windowMode = settingsStore.settings.windowMode
+        if let presentedView = model.presentedView {
+            guard let contentHeight = presentedView.preferredContentHeight else {
+                return LauncherTheme.Metrics.panelHeight(for: windowMode)
+            }
+            return LauncherTheme.Metrics.panelHeight(
+                contentHeight: contentHeight,
+                windowMode: windowMode
+            )
+        }
+        return LauncherTheme.Metrics.panelHeight(
+            rowCount: model.results.count,
+            sectionCount: 1,
+            windowMode: windowMode
         )
     }
 }

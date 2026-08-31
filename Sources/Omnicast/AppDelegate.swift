@@ -304,6 +304,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         )
                     )
                 },
+                onHeightChange: { [weak panel] height, animated in
+                    panel?.setContentHeight(height, animated: animated)
+                },
                 onHide: { [weak panel] returnFocus in
                     panel?.hide(returningFocus: returnFocus)
                 },

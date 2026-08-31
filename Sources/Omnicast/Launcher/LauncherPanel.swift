@@ -16,11 +16,15 @@ final class LauncherPanel: NSPanel {
     private var globalMouseUpMonitor: Any?
     private var nudgedVerticalGuide = false
     private var nudgedHorizontalGuide = false
+    private var windowMode: LauncherWindowMode
+    private var desiredHeight: CGFloat
     private let alignmentGuide = LauncherPanelAlignmentGuideWindow()
     private(set) var hiddenAt: Date?
 
     init(keyEvents: LauncherKeyEvents, windowMode: LauncherWindowMode = .standard) {
         self.keyEvents = keyEvents
+        self.windowMode = windowMode
+        desiredHeight = LauncherTheme.Metrics.panelHeight(for: windowMode)
         super.init(
             contentRect: NSRect(
                 x: 0,
@@ -82,7 +86,7 @@ final class LauncherPanel: NSPanel {
 
         positioningProgrammatically = true
         if let position, isPositionVisible(position) {
-            setFrameOrigin(NSPoint(x: position.x, y: position.y))
+            setFrameTopLeftPoint(NSPoint(x: position.x, y: position.y))
         } else {
             setDefaultPosition()
         }
@@ -117,12 +121,33 @@ final class LauncherPanel: NSPanel {
     }
 
     func setWindowMode(_ windowMode: LauncherWindowMode) {
-        let newHeight = LauncherTheme.Metrics.panelHeight(for: windowMode)
+        self.windowMode = windowMode
+        applyHeight(animated: true)
+    }
+
+    func setContentHeight(_ height: CGFloat, animated: Bool) {
+        desiredHeight = height
+        applyHeight(animated: animated)
+    }
+
+    private func applyHeight(animated: Bool) {
+        let newHeight = min(
+            max(desiredHeight, LauncherTheme.Metrics.minimumPanelHeight),
+            LauncherTheme.Metrics.panelHeight(for: windowMode)
+        )
         guard frame.height != newHeight else { return }
         var newFrame = frame
         newFrame.origin.y += frame.height - newHeight
         newFrame.size.height = newHeight
-        setFrame(newFrame, display: true, animate: isVisible)
+        guard isVisible, animated else {
+            setFrame(newFrame, display: true)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = LauncherTheme.Metrics.panelResizeAnimationDuration
+            animator().setFrame(newFrame, display: true)
+        }
     }
 
     func shouldResetNavigationOnShow(
@@ -206,7 +231,7 @@ final class LauncherPanel: NSPanel {
     private func isPositionVisible(_ position: LauncherWindowPosition) -> Bool {
         let proposed = NSRect(
             x: position.x,
-            y: position.y,
+            y: position.y - frame.height,
             width: frame.width,
             height: frame.height
         )
@@ -321,7 +346,7 @@ final class LauncherPanel: NSPanel {
             onPositionChanged?(nil)
         } else {
             onPositionChanged?(
-                LauncherWindowPosition(x: Double(frame.minX), y: Double(frame.minY))
+                LauncherWindowPosition(x: Double(frame.minX), y: Double(frame.maxY))
             )
         }
     }
