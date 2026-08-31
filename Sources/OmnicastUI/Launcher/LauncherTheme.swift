@@ -21,10 +21,10 @@ public enum LauncherTheme {
         public static let sectionTopPadding: CGFloat = 10
         public static let sectionBottomPadding: CGFloat = 4
 
-        public static let rowHeight: CGFloat = 46
+        public static let rowHeight: CGFloat = 54
         public static let rowOuterInset: CGFloat = 8
         public static let rowContentPadding: CGFloat = 14
-        public static let rowIconSize: CGFloat = 28
+        public static let rowIconSize: CGFloat = 32
         public static let rowIconCornerRadius: CGFloat = 6
         public static let rowIconTitleSpacing: CGFloat = 12
         public static let rowSubtitleSpacing: CGFloat = 8
