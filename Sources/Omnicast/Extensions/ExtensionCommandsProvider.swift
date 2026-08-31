@@ -28,7 +28,14 @@ private struct InstalledExtensionLauncherCommand: Command {
     let manifest: ExtensionCommandManifest
     let open: @MainActor @Sendable (InstalledExtension, ExtensionCommandManifest) -> Void
 
-    var id: String { "extension:\(installedExtension.slug):\(manifest.name)" }
+    var id: String {
+        if installedExtension.isBuiltin,
+           installedExtension.slug == ExtensionRegistry.builtinStoreSlug,
+           manifest.name == ExtensionRegistry.builtinStoreCommandName {
+            return "extension:store"
+        }
+        return "extension:\(installedExtension.slug):\(manifest.name)"
+    }
     var title: String { manifest.title }
     var subtitle: String { installedExtension.manifest.title }
     var icon: CommandIcon {

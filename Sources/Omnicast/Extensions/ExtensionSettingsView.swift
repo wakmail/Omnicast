@@ -191,8 +191,16 @@ struct ExtensionSettingsView: View {
                             .foregroundStyle(LauncherTheme.Palette.secondaryText(for: colorScheme))
                     }
                     Spacer()
-                    Button("Uninstall", role: .destructive) {
-                        Task { await model.uninstall(extensionValue) }
+                    if extensionValue.isBuiltin {
+                        Text("Built In")
+                            .font(LauncherTheme.Typography.footerTitle)
+                            .foregroundStyle(
+                                LauncherTheme.Palette.secondaryText(for: colorScheme)
+                            )
+                    } else {
+                        Button("Uninstall", role: .destructive) {
+                            Task { await model.uninstall(extensionValue) }
+                        }
                     }
                 }
             }

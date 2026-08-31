@@ -1,0 +1,17 @@
+{
+  "name": "store",
+  "title": "Extension Store",
+  "description": "Browse and install extensions",
+  "version": "1.0.0",
+  "icon": "🧩",
+  "author": "Omnicast",
+  "commands": [
+    {
+      "name": "index",
+      "title": "Extension Store",
+      "description": "Browse and install extensions",
+      "mode": "view",
+      "source": "index.js"
+    }
+  ]
+}

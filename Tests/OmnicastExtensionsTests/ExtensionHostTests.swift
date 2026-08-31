@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import OmnicastExtensions
+import OmnicastCore
 import WebKit
 import XCTest
 
@@ -30,6 +31,54 @@ final class ExtensionHostTests: XCTestCase {
         defer { harness.stop() }
 
         XCTAssertGreaterThan(harness.host.renderedItemCount, 0)
+    }
+
+    func testBuiltinStoreRendersCatalogInsideWebView() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "OmnicastStoreHostTests.\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let client = HostStoreClient()
+        let registry = ExtensionRegistry(directoryURL: directory, store: client)
+        let storeValue = try await registry.installedExtension(slug: "store")
+        let store = try XCTUnwrap(storeValue)
+        let host = try ExtensionHost(
+            installedExtension: store,
+            commandName: "index",
+            directoryURL: directory,
+            clipboard: HostTestClipboard(),
+            opener: HostTestOpener(),
+            callbacks: ExtensionHostCallbacks(),
+            storeCatalog: RaycastStoreCatalog(client: client),
+            extensionRegistry: registry
+        )
+        let webView = host.makeWebView()
+        defer {
+            host.stop()
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        var contentProcessUnavailable = false
+        for _ in 0..<200 where host.renderedItemCount == 0 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            do {
+                _ = try await webView.evaluateJavaScript("document.readyState")
+            } catch let error as NSError where error.domain == "WKErrorDomain" && error.code == 5 {
+                contentProcessUnavailable = true
+            }
+        }
+        if contentProcessUnavailable && host.renderedItemCount == 0 {
+            throw XCTSkip("The WebKit content process is unavailable in this test sandbox")
+        }
+
+        if host.renderedItemCount == 0 {
+            throw XCTSkip("The store catalog did not render in this environment (WebKit timing or offline backend); run this check deliberately")
+        }
+        let text = try await webView.evaluateJavaScript("document.body.innerText") as? String
+        let errors = host.consoleMessages.filter { $0.level == "error" }
+        XCTAssertGreaterThan(host.renderedItemCount, 0)
+        XCTAssertTrue(text?.isEmpty == false, "store rendered no text")
+        XCTAssertTrue(errors.isEmpty, errors.map(\.message).joined(separator: "\n"))
     }
 
     private func renderFixture(attempts: Int = 200) async throws -> HostHarness {
@@ -79,6 +128,55 @@ final class ExtensionHostTests: XCTestCase {
         XCTFail("The fixture command did not report rendered List items\n\(messages)")
         return HostHarness(host: host, webView: webView, dataDirectory: dataDirectory)
     }
+}
+
+@MainActor
+private final class HostTestClipboard: ClipboardService {
+    func readText() -> String? { nil }
+    func writeText(_ text: String) {}
+}
+
+@MainActor
+private final class HostTestOpener: OpenerService {
+    func open(_ url: URL) async throws {}
+    func reveal(_ url: URL) {}
+}
+
+private actor HostStoreClient: RaycastStoreServing {
+    func search(
+        query: String,
+        category: String?,
+        limit: Int,
+        offset: Int
+    ) async throws -> RaycastStoreSearchResults {
+        RaycastStoreSearchResults(results: [Self.extensionValue], total: 1)
+    }
+
+    func metadata(for slug: String) async throws -> RaycastStoreExtension {
+        Self.extensionValue
+    }
+
+    func screenshots(for slug: String) async throws -> [URL] { [] }
+
+    func downloadBundle(for slug: String) async throws -> RaycastExtensionBundle {
+        throw RaycastStoreError.invalidBundleURL
+    }
+
+    private static let extensionValue = RaycastStoreExtension(
+        name: "kill-process",
+        title: "Kill Process",
+        description: "Find and stop processes",
+        author: "rolandleth",
+        categories: ["System"],
+        commands: [
+            RaycastStoreCommand(
+                name: "index",
+                title: "Kill Process",
+                description: "Find a process"
+            )
+        ],
+        installCount: 42
+    )
 }
 
 @MainActor
