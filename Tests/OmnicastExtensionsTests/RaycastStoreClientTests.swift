@@ -85,7 +85,7 @@ final class RaycastStoreClientTests: XCTestCase {
     """
 
     private static let searchResponse = """
-    {"results":[\(metadataResponse)],"total":1}
+    [\(metadataResponse)]
     """
 }
 
